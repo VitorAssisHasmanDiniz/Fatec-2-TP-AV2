@@ -27,7 +27,7 @@ const limiteLogin = rateLimit({
 
 router.post("/login", limiteLogin, async (req, res, next) => {
     try {
-        const { usuario, senha } = req.body;
+        const { nome, usuario, senha } = req.body;
 
         if (
             typeof usuario !== "string" ||
@@ -49,7 +49,7 @@ router.post("/login", limiteLogin, async (req, res, next) => {
 
         res.json({
             nivel: "SUCESSO",
-            mensagem: `Bem vindo ${resultado.usuario.usuario}!`,
+            mensagem: `Bem vindo ${resultado.usuario.nome}!`,
             dados: resultado,
         });
     } catch (erro) {

@@ -3,12 +3,13 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../src/lib/prisma.js";
 
 async function main() {
+    const nome = process.env.ADM_NOME?.trim();
     const usuario = process.env.ADM_LOGIN?.trim();
     const senha = process.env.ADM_SENHA;
 
-    if (!usuario || !senha) {
+    if (!usuario || !senha || !nome) {
         throw new Error(
-            "Defina ADM_LOGIN e ADM_SENHA no arquivo .env."
+            "Defina ADM_NOME, ADM_LOGIN e ADM_SENHA no arquivo .env."
         );
     }
 
@@ -39,6 +40,7 @@ async function main() {
 
     await prisma.usuario.create({
         data: {
+            nome,
             usuario,
             senhaHash,
             papel: "ADMINISTRADOR",
@@ -46,7 +48,7 @@ async function main() {
     });
 
     console.log(
-        `Administrador "${usuario}" criado com sucesso.`
+        `Administrador "${nome}" criado com sucesso.`
     );
 }
 

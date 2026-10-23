@@ -40,7 +40,7 @@ router.get("/inativos", async (_req, res, next) => {
         res.json({
             nivel: "SUCESSO",
             mensagem: "Usuários inativos listados com sucesso",
-            dados: usuarios
+            dados: usuarios,
         });
     } catch (erro) {
         next(erro);
@@ -64,7 +64,7 @@ router.get("/:id", async (req, res, next) => {
         res.json({
             nivel: "SUCESSO",
             mensagem: "Usuário encontrado com sucesso",
-            dados: usuario
+            dados: usuario,
         });
     } catch (erro) {
         next(erro);
@@ -73,24 +73,27 @@ router.get("/:id", async (req, res, next) => {
 
 router.post("/", async (req, res, next) => {
     try {
-        const { usuario, senha, papel } = req.body ?? {};
+        const { nome, usuario, senha, papel } = req.body ?? {};
 
         if (
+            typeof nome !== "string" ||
             typeof usuario !== "string" ||
             typeof senha !== "string" ||
             typeof papel !== "string" ||
+            !nome.trim() ||
             !usuario.trim() ||
             !senha ||
             !papeisValidos.includes(papel as PapelUsuario)
         ) {
             throw new AppError(
-                "Informe usuário, senha e um papel válido",
+                "Informe nome, usuário, senha e um papel válido",
                 400,
                 "DADOS_INVALIDOS"
             );
         }
 
         const novoUsuario = await servicoUsuarios.criar(
+            nome,
             usuario,
             senha,
             papel as PapelUsuario
@@ -109,7 +112,8 @@ router.post("/", async (req, res, next) => {
 router.put("/:id", async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { usuario, senha, confirmarSenha, papel } = req.body ?? {};
+        const { nome, usuario, senha, confirmarSenha, papel } =
+            req.body ?? {};
 
         if (typeof id !== "string") {
             throw new AppError(
@@ -120,9 +124,11 @@ router.put("/:id", async (req, res, next) => {
         }
 
         if (
+            (nome !== undefined && typeof nome !== "string") ||
             (usuario !== undefined && typeof usuario !== "string") ||
             (senha !== undefined && typeof senha !== "string") ||
-            (confirmarSenha !== undefined && typeof confirmarSenha !== "string") ||
+            (confirmarSenha !== undefined &&
+                typeof confirmarSenha !== "string") ||
             (papel !== undefined && typeof papel !== "string")
         ) {
             throw new AppError(
@@ -133,7 +139,10 @@ router.put("/:id", async (req, res, next) => {
         }
 
         if (senha !== undefined) {
-            if (typeof confirmarSenha !== "string" || senha !== confirmarSenha) {
+            if (
+                typeof confirmarSenha !== "string" ||
+                senha !== confirmarSenha
+            ) {
                 throw new AppError(
                     "As senhas não coincidem",
                     400,
@@ -141,11 +150,8 @@ router.put("/:id", async (req, res, next) => {
                 );
             }
         }
-        
-        if (
-            confirmarSenha !== undefined &&
-            senha === undefined
-        ) {
+
+        if (confirmarSenha !== undefined && senha === undefined) {
             throw new AppError(
                 "Envie a senha junto com a confirmação",
                 400,
@@ -154,15 +160,16 @@ router.put("/:id", async (req, res, next) => {
         }
 
         const usuarioAtualizado = await servicoUsuarios.atualizar(id, {
+            nome,
             usuario,
             senha,
-            papel
+            papel,
         });
 
         res.json({
             nivel: "SUCESSO",
             mensagem: "Usuário atualizado com sucesso",
-            dados: usuarioAtualizado
+            dados: usuarioAtualizado,
         });
     } catch (erro) {
         next(erro);
@@ -191,7 +198,7 @@ router.delete("/:id", async (req, res, next) => {
         res.json({
             nivel: "SUCESSO",
             mensagem: "Usuário excluído com sucesso",
-            dados: usuario
+            dados: usuario,
         });
     } catch (erro) {
         next(erro);
@@ -226,13 +233,11 @@ router.patch("/:id/status", async (req, res, next) => {
             mensagem: ativo
                 ? "Usuário ativado com sucesso"
                 : "Usuário desativado com sucesso",
-            dados: usuario
+            dados: usuario,
         });
     } catch (erro) {
         next(erro);
     }
 });
-
-
 
 export default router;

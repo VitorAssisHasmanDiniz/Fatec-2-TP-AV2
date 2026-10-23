@@ -58,6 +58,7 @@ export default class ServicoAutenticacao {
             token,
             usuario: {
                 id: registro.id,
+                nome: registro.nome,
                 usuario: registro.usuario,
                 papel: registro.papel,
             },

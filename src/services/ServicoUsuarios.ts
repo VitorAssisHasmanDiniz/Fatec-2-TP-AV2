@@ -4,44 +4,73 @@ import { prisma } from "../lib/prisma.js";
 import AppError from "../errors/AppError.js";
 import type { PapelUsuario } from "../types/Autenticacao.js";
 
+const papeisValidos: PapelUsuario[] = [
+    "ADMINISTRADOR",
+    "OPERADOR_CADASTRO",
+    "GESTOR_ALMOXARIFADO",
+    "AUDITOR",
+];
+
+function validarNome(nome: string): string {
+    const nomeFormatado = nome.trim();
+
+    if (!nomeFormatado || nomeFormatado.length > 120) {
+        throw new AppError(
+            "O nome deve ter de 1 a 120 caracteres",
+            400,
+            "NOME_INVALIDO"
+        );
+    }
+
+    return nomeFormatado;
+}
+
+function validarUsuario(usuario: string): string {
+    const nomeUsuario = usuario.trim();
+
+    if (!/^[a-zA-Z0-9._-]{3,40}$/.test(nomeUsuario)) {
+        throw new AppError(
+            "O usuário deve ter de 3 a 40 caracteres válidos",
+            400,
+            "USUARIO_INVALIDO"
+        );
+    }
+
+    return nomeUsuario;
+}
+
+function validarSenha(senha: string): void {
+    if (senha.length < 8) {
+        throw new AppError(
+            "A senha deve ter pelo menos 8 caracteres",
+            400,
+            "SENHA_INVALIDA"
+        );
+    }
+}
+
+function validarPapel(papel: PapelUsuario): void {
+    if (!papeisValidos.includes(papel)) {
+        throw new AppError(
+            "Papel de usuário inválido",
+            400,
+            "PAPEL_INVALIDO"
+        );
+    }
+}
+
 export default class ServicoUsuarios {
     async criar(
+        nome: string,
         usuario: string,
         senha: string,
         papel: PapelUsuario
     ) {
-        const nomeUsuario = usuario.trim();
+        const nomeFormatado = validarNome(nome);
+        const nomeUsuario = validarUsuario(usuario);
 
-        if (!/^[a-zA-Z0-9._-]{3,40}$/.test(nomeUsuario)) {
-            throw new AppError(
-                "O usuário deve ter de 3 a 40 caracteres válidos",
-                400,
-                "USUARIO_INVALIDO"
-            );
-        }
-
-        if (senha.length < 12) {
-            throw new AppError(
-                "A senha deve ter pelo menos 12 caracteres",
-                400,
-                "SENHA_INVALIDA"
-            );
-        }
-
-        const papeisValidos: PapelUsuario[] = [
-            "ADMINISTRADOR",
-            "OPERADOR_CADASTRO",
-            "GESTOR_ALMOXARIFADO",
-            "AUDITOR",
-        ];
-
-        if (!papeisValidos.includes(papel)) {
-            throw new AppError(
-                "Papel de usuário inválido",
-                400,
-                "PAPEL_INVALIDO"
-            );
-        }
+        validarSenha(senha);
+        validarPapel(papel);
 
         const existente = await prisma.usuario.findUnique({
             where: { usuario: nomeUsuario },
@@ -57,31 +86,30 @@ export default class ServicoUsuarios {
 
         const senhaHash = await bcrypt.hash(senha, 12);
 
-        const novoUsuario = await prisma.usuario.create({
+        return prisma.usuario.create({
             data: {
+                nome: nomeFormatado,
                 usuario: nomeUsuario,
                 senhaHash,
                 papel,
             },
             select: {
                 id: true,
+                nome: true,
                 usuario: true,
                 papel: true,
                 ativo: true,
                 criadoEm: true,
             },
         });
-
-        return novoUsuario;
     }
 
     async listar() {
         return prisma.usuario.findMany({
-            where: {
-                ativo: true
-            },
+            where: { ativo: true },
             select: {
                 id: true,
+                nome: true,
                 usuario: true,
                 papel: true,
                 ativo: true,
@@ -89,29 +117,24 @@ export default class ServicoUsuarios {
                 criadoEm: true,
                 atualizadoEm: true,
             },
-            orderBy: {
-                criadoEm: "desc",
-            },
+            orderBy: { criadoEm: "desc" },
         });
     }
 
     async listarInativos() {
         return prisma.usuario.findMany({
-            where: {
-                ativo: false
-            },
+            where: { ativo: false },
             select: {
                 id: true,
+                nome: true,
                 usuario: true,
                 papel: true,
                 ativo: true,
                 ultimoAcesso: true,
                 criadoEm: true,
-                atualizadoEm: true
+                atualizadoEm: true,
             },
-            orderBy: {
-                criadoEm: "desc"
-            }
+            orderBy: { criadoEm: "desc" },
         });
     }
 
@@ -120,13 +143,14 @@ export default class ServicoUsuarios {
             where: { id },
             select: {
                 id: true,
+                nome: true,
                 usuario: true,
                 papel: true,
                 ativo: true,
                 ultimoAcesso: true,
                 criadoEm: true,
-                atualizadoEm: true
-            }
+                atualizadoEm: true,
+            },
         });
 
         if (!usuario) {
@@ -143,13 +167,14 @@ export default class ServicoUsuarios {
     async atualizar(
         id: string,
         dados: {
+            nome?: string;
             usuario?: string;
             senha?: string;
             papel?: PapelUsuario;
         }
     ) {
         const existente = await prisma.usuario.findUnique({
-            where: { id }
+            where: { id },
         });
 
         if (!existente) {
@@ -161,24 +186,21 @@ export default class ServicoUsuarios {
         }
 
         const atualizacao: {
+            nome?: string;
             usuario?: string;
             senhaHash?: string;
             papel?: PapelUsuario;
         } = {};
 
-        if (dados.usuario !== undefined) {
-            const nomeUsuario = dados.usuario.trim();
+        if (dados.nome !== undefined) {
+            atualizacao.nome = validarNome(dados.nome);
+        }
 
-            if (!/^[a-zA-Z0-9._-]{3,40}$/.test(nomeUsuario)) {
-                throw new AppError(
-                    "O usuário deve ter de 3 a 40 caracteres válidos",
-                    400,
-                    "USUARIO_INVALIDO"
-                );
-            }
+        if (dados.usuario !== undefined) {
+            const nomeUsuario = validarUsuario(dados.usuario);
 
             const usuarioExistente = await prisma.usuario.findUnique({
-                where: { usuario: nomeUsuario }
+                where: { usuario: nomeUsuario },
             });
 
             if (usuarioExistente && usuarioExistente.id !== id) {
@@ -193,33 +215,12 @@ export default class ServicoUsuarios {
         }
 
         if (dados.senha !== undefined) {
-            if (dados.senha.length < 8) {
-                throw new AppError(
-                    "A senha deve ter pelo menos 8 caracteres",
-                    400,
-                    "SENHA_INVALIDA"
-                );
-            }
-
+            validarSenha(dados.senha);
             atualizacao.senhaHash = await bcrypt.hash(dados.senha, 12);
         }
 
         if (dados.papel !== undefined) {
-            const papeisValidos: PapelUsuario[] = [
-                "ADMINISTRADOR",
-                "OPERADOR_CADASTRO",
-                "GESTOR_ALMOXARIFADO",
-                "AUDITOR"
-            ];
-
-            if (!papeisValidos.includes(dados.papel)) {
-                throw new AppError(
-                    "Papel de usuário inválido",
-                    400,
-                    "PAPEL_INVALIDO"
-                );
-            }
-
+            validarPapel(dados.papel);
             atualizacao.papel = dados.papel;
         }
 
@@ -236,19 +237,20 @@ export default class ServicoUsuarios {
             data: atualizacao,
             select: {
                 id: true,
+                nome: true,
                 usuario: true,
                 papel: true,
                 ativo: true,
                 ultimoAcesso: true,
                 criadoEm: true,
-                atualizadoEm: true
-            }
+                atualizadoEm: true,
+            },
         });
     }
 
     async alterarStatus(id: string, ativo: boolean) {
         const existente = await prisma.usuario.findUnique({
-            where: { id }
+            where: { id },
         });
 
         if (!existente) {
@@ -264,13 +266,14 @@ export default class ServicoUsuarios {
             data: { ativo },
             select: {
                 id: true,
+                nome: true,
                 usuario: true,
                 papel: true,
                 ativo: true,
                 ultimoAcesso: true,
                 criadoEm: true,
-                atualizadoEm: true
-            }
+                atualizadoEm: true,
+            },
         });
     }
 
@@ -284,7 +287,7 @@ export default class ServicoUsuarios {
         }
 
         const existente = await prisma.usuario.findUnique({
-            where: { id }
+            where: { id },
         });
 
         if (!existente) {
@@ -296,12 +299,13 @@ export default class ServicoUsuarios {
         }
 
         await prisma.usuario.delete({
-            where: { id }
+            where: { id },
         });
 
         return {
             id: existente.id,
-            usuario: existente.usuario
+            nome: existente.nome,
+            usuario: existente.usuario,
         };
     }
 }
