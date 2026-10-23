@@ -4,6 +4,7 @@ import helmet from "helmet";
 import cors from "cors";
 import AppError from "./errors/AppError.js";
 import errorHandler from "./middlewares/errorHandler.js";
+import authRouter from "./routes/auth.js";
 import { pinoHttp } from "pino-http";
 import { logger } from "./lib/logger.js";
 import { prisma } from "./lib/prisma.js";
@@ -44,6 +45,8 @@ app.get("/health/db", async (_req, res) => {
         });
     }
 });
+
+app.use("/auth", authRouter);
 
 app.use((_req, _res, next) => {
     next(new AppError("Rota não encontrada", 404, "ROTA_NAO_ENCONTRADA"));
