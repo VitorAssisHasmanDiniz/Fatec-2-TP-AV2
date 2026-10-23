@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
-import cors from "cors";
 import AppError from "./errors/AppError.js";
 import errorHandler from "./middlewares/errorHandler.js";
 import authRouter from "./routes/auth.js";
@@ -13,13 +12,11 @@ import { prisma } from "./lib/prisma.js";
 const app = express();
 
 app.use(helmet());
-app.use(cors({
-    origin: process.env.CORS_ORIGIN?.split(",") || "http://localhost:5173",
-    methods: ["GET", "POST", "PATCH", "DELETE"],
-}));
+
 app.use(pinoHttp({
     logger,
 }));
+
 app.use(express.json());
 
 app.get("/", (_req, res) => {
