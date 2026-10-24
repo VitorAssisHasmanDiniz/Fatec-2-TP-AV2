@@ -46,6 +46,7 @@ model Organizacao {
   versao             Int       @default(1)
   criadoEm           DateTime  @default(now())
   atualizadoEm       DateTime  @updatedAt
+  lotes Lote[]
 
   contratoVigente    Contrato?
 
@@ -64,4 +65,29 @@ model Contrato {
   organizacao         Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Cascade)
 
   @@map("contratos")
+}
+
+enum StatusLote {
+  RECEBIDO
+  EM_TRIAGEM
+  TRIAGEM_CONCLUIDA
+  ENCAMINHADO
+  FINALIZADO
+  CANCELADO
+}
+
+model Lote {
+  id                 String     @id @db.VarChar(40)
+  dataEntrada        DateTime   @default(now())
+  organizacaoId      String     @db.VarChar(20)
+  notaFiscal         String     @db.VarChar(100)
+  transportadora     String     @db.VarChar(120)
+  statusProcessamento StatusLote @default(RECEBIDO)
+  observacoes        String     @default("") @db.Text
+
+  organizacao        Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Restrict)
+
+  @@index([organizacaoId])
+  @@index([dataEntrada])
+  @@map("lotes")
 }

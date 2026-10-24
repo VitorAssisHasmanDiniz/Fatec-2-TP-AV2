@@ -6,6 +6,32 @@ import AppError from "../errors/AppError.js";
 const router = Router();
 const servico = new ServicoOrganizacao();
 router.use(autenticar, autorizar("ADMINISTRADOR", "OPERADOR_CADASTRO"));
+router.get("/", async (_req, res, next) => {
+    try {
+        const organizacoes = await servico.listarOrganizacoesAtivas();
+        return res.status(200).json({
+            nivel: "SUCESSO",
+            mensagem: "Organizações ativas consultadas com sucesso.",
+            dados: organizacoes
+        });
+    }
+    catch (erro) {
+        next(erro);
+    }
+});
+router.get("/:id", async (req, res, next) => {
+    try {
+        const organizacao = await servico.buscarOrganizacao(req.params.id);
+        return res.status(200).json({
+            nivel: "SUCESSO",
+            mensagem: "Organização consultada com sucesso.",
+            dados: organizacao
+        });
+    }
+    catch (erro) {
+        next(erro);
+    }
+});
 router.post("/", async (req, res, next) => {
     try {
         const { id, razaoSocial, cnpj, inscricaoEstadual, enderecoCompleto, telefone, email, vencimentoContrato, valorMensal } = req.body;
@@ -37,25 +63,12 @@ router.post("/", async (req, res, next) => {
         next(erro);
     }
 });
-router.get("/", async (_req, res, next) => {
+router.patch("/:id/desativar", async (req, res, next) => {
     try {
-        const organizacoes = await servico.listarOrganizacoesAtivas();
+        const organizacao = await servico.desativarOrganizacao(req.params.id);
         return res.status(200).json({
             nivel: "SUCESSO",
-            mensagem: "Organizações ativas consultadas com sucesso.",
-            dados: organizacoes
-        });
-    }
-    catch (erro) {
-        next(erro);
-    }
-});
-router.get("/:id", async (req, res, next) => {
-    try {
-        const organizacao = await servico.buscarOrganizacao(req.params.id);
-        return res.status(200).json({
-            nivel: "SUCESSO",
-            mensagem: "Organização consultada com sucesso.",
+            mensagem: "Organização desativada com sucesso.",
             dados: organizacao
         });
     }
@@ -63,12 +76,12 @@ router.get("/:id", async (req, res, next) => {
         next(erro);
     }
 });
-router.patch("/:id/desativar", async (req, res, next) => {
+router.patch("/:id/ativar", async (req, res, next) => {
     try {
-        const organizacao = await servico.desativarOrganizacao(req.params.id);
+        const organizacao = await servico.ativarOrganizacao(req.params.id);
         return res.status(200).json({
             nivel: "SUCESSO",
-            mensagem: "Organização desativada com sucesso.",
+            mensagem: "Organização ativada com sucesso.",
             dados: organizacao
         });
     }

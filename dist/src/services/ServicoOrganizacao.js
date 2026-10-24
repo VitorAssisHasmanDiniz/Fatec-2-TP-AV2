@@ -93,6 +93,26 @@ export default class ServicoOrganizacao {
             include: { contratoVigente: true }
         });
     }
+    async ativarOrganizacao(id) {
+        const organizacao = await prisma.organizacao.findUnique({
+            where: { id },
+            select: { id: true, ativo: true }
+        });
+        if (!organizacao) {
+            throw new AppError("Organização não encontrada.", 404, "ORGANIZACAO_NAO_ENCONTRADA");
+        }
+        if (organizacao.ativo) {
+            throw new AppError("A organização já está ativa.", 409, "ORGANIZACAO_JA_ATIVA");
+        }
+        return prisma.organizacao.update({
+            where: { id },
+            data: {
+                ativo: true,
+                versao: { increment: 1 }
+            },
+            include: { contratoVigente: true }
+        });
+    }
     async renovarContrato(organizacaoId, novoVencimento) {
         if (!(novoVencimento instanceof Date)
             || Number.isNaN(novoVencimento.getTime())) {

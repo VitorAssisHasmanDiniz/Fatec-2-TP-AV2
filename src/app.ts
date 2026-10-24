@@ -7,6 +7,7 @@ import path from "path";
 import authRouter from "./routes/auth.js";
 import usuariosRouter from "./routes/usuarios.js";
 import rotasOrganizacoes from "./routes/organizacoes.js";
+import lotesRouter from "./routes/lotes.js";
 import { pinoHttp } from "pino-http";
 import { logger } from "./lib/logger.js";
 import { prisma } from "./lib/prisma.js";
@@ -61,6 +62,8 @@ app.get("/paysandu", (req, res) => {
     }
     res.json({ message: "Paysandu" });
 });
+
+app.use("/lotes", lotesRouter);
 
 app.use((_req, _res, next) => {
     next(new AppError("Rota não encontrada", 404, "ROTA_NAO_ENCONTRADA"));

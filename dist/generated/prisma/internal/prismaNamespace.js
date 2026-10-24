@@ -69,7 +69,8 @@ export const AnyNull = runtime.AnyNull;
 export const ModelName = {
     Usuario: 'Usuario',
     Organizacao: 'Organizacao',
-    Contrato: 'Contrato'
+    Contrato: 'Contrato',
+    Lote: 'Lote'
 };
 /**
  * Enums
@@ -114,6 +115,15 @@ export const ContratoScalarFieldEnum = {
     clausulas: 'clausulas',
     valorMensal: 'valorMensal',
     renovacaoAutomatica: 'renovacaoAutomatica'
+};
+export const LoteScalarFieldEnum = {
+    id: 'id',
+    dataEntrada: 'dataEntrada',
+    organizacaoId: 'organizacaoId',
+    notaFiscal: 'notaFiscal',
+    transportadora: 'transportadora',
+    statusProcessamento: 'statusProcessamento',
+    observacoes: 'observacoes'
 };
 export const SortOrder = {
     asc: 'asc',
