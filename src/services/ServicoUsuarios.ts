@@ -1,4 +1,3 @@
-
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.js";
 import AppError from "../errors/AppError.js";

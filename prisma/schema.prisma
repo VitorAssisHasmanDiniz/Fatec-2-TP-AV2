@@ -87,7 +87,76 @@ model Lote {
 
   organizacao        Organizacao @relation(fields: [organizacaoId], references: [id], onDelete: Restrict)
 
+  equipamentos Equipamento[]
+
   @@index([organizacaoId])
   @@index([dataEntrada])
   @@map("lotes")
+}
+
+enum TipoEquipamento {
+  COMPUTADOR_MESA
+  NOTEBOOK
+  MONITOR
+  IMPRESSORA
+  SERVIDOR
+  ROTEADOR
+  CABO_ESTRUTURADO
+  FONTE_ALIMENTACAO
+}
+
+enum EstadoFisico {
+  NOVO
+  BOM_ESTADO
+  USADO_LEVE
+  USADO_MODERADO
+  DANIFICADO_LEVE
+  DANIFICADO_GRAVE
+  INSERVIVEL
+}
+
+enum StatusRastreamento {
+  AGUARDANDO_TRIAGEM
+  EM_TRIAGEM
+  AGUARDANDO_DESMONTE
+  PECAS_REAPROVEITADAS
+  MATERIAL_RECICLAVEL
+  DESCARTE_SEGURO
+  BAIXA_DEFINITIVA
+}
+
+model Equipamento {
+  id                   String              @id @default(uuid()) @db.Uuid
+  codigoBarrasInterno  String              @unique
+  tipo                 TipoEquipamento     @default(COMPUTADOR_MESA)
+  marca                String              @default("")
+  modelo               String              @default("")
+  anoFabricacao        Int                 @default(0)
+  estadoFisico         EstadoFisico        @default(NOVO)
+  pesoQuilogramas      Float               @default(0)
+  loteId               String              @db.VarChar(40)
+  posicaoNoLote        Int                 @default(0)
+  statusRastreamento   StatusRastreamento  @default(AGUARDANDO_TRIAGEM)
+
+  lote                 Lote                @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  historicoMovimentacao Movimentacao[]
+
+  @@index([loteId])
+  @@index([statusRastreamento])
+  @@map("equipamentos")
+}
+
+model Movimentacao {
+  id            String      @id @default(uuid()) @db.Uuid
+  equipamentoId String      @db.Uuid
+  dataHora      DateTime    @default(now())
+  origem        String
+  destino       String
+  responsavel   String
+  observacao    String      @default("")
+
+  equipamento   Equipamento @relation(fields: [equipamentoId], references: [id], onDelete: Restrict)
+
+  @@index([equipamentoId, dataHora])
+  @@map("movimentacoes")
 }

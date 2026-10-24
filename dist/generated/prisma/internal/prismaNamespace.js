@@ -70,7 +70,9 @@ export const ModelName = {
     Usuario: 'Usuario',
     Organizacao: 'Organizacao',
     Contrato: 'Contrato',
-    Lote: 'Lote'
+    Lote: 'Lote',
+    Equipamento: 'Equipamento',
+    Movimentacao: 'Movimentacao'
 };
 /**
  * Enums
@@ -124,6 +126,28 @@ export const LoteScalarFieldEnum = {
     transportadora: 'transportadora',
     statusProcessamento: 'statusProcessamento',
     observacoes: 'observacoes'
+};
+export const EquipamentoScalarFieldEnum = {
+    id: 'id',
+    codigoBarrasInterno: 'codigoBarrasInterno',
+    tipo: 'tipo',
+    marca: 'marca',
+    modelo: 'modelo',
+    anoFabricacao: 'anoFabricacao',
+    estadoFisico: 'estadoFisico',
+    pesoQuilogramas: 'pesoQuilogramas',
+    loteId: 'loteId',
+    posicaoNoLote: 'posicaoNoLote',
+    statusRastreamento: 'statusRastreamento'
+};
+export const MovimentacaoScalarFieldEnum = {
+    id: 'id',
+    equipamentoId: 'equipamentoId',
+    dataHora: 'dataHora',
+    origem: 'origem',
+    destino: 'destino',
+    responsavel: 'responsavel',
+    observacao: 'observacao'
 };
 export const SortOrder = {
     asc: 'asc',
