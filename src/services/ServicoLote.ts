@@ -20,7 +20,10 @@ export interface DadosEdicaoLote {
 }
 
 export default class ServicoLote {
-    async criarLote(dados: DadosLote) {
+    async criarLote(
+        dados: DadosLote,
+        usuarioId: string | null = null
+    ) {
         const organizacaoId = dados.org.trim();
         const notaFiscal = dados.nf.trim();
         const transportadora = dados.transp.trim();
@@ -36,8 +39,8 @@ export default class ServicoLote {
         }
 
         if (
-            !(dataEntrada instanceof Date)
-            || Number.isNaN(dataEntrada.getTime())
+            !(dataEntrada instanceof Date) ||
+            Number.isNaN(dataEntrada.getTime())
         ) {
             throw new AppError(
                 "Data de entrada inválida.",
@@ -50,8 +53,8 @@ export default class ServicoLote {
         const limite = agora - 90 * 24 * 60 * 60 * 1000;
 
         if (
-            dataEntrada.getTime() > agora
-            || dataEntrada.getTime() < limite
+            dataEntrada.getTime() > agora ||
+            dataEntrada.getTime() < limite
         ) {
             throw new AppError(
                 "A data de entrada deve estar entre hoje e os últimos 90 dias.",
@@ -81,24 +84,43 @@ export default class ServicoLote {
         const id = `LOT-${dataFormatada}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
 
         try {
-            return await prisma.lote.create({
-                data: {
-                    id,
-                    organizacaoId,
-                    notaFiscal,
-                    transportadora,
-                    dataEntrada,
-                    observacoes,
-                    statusProcessamento: "RECEBIDO"
-                },
-                include: {
-                    organizacao: true
-                }
+            return await prisma.$transaction(async (tx) => {
+                const lote = await tx.lote.create({
+                    data: {
+                        id,
+                        organizacaoId,
+                        notaFiscal,
+                        transportadora,
+                        dataEntrada,
+                        observacoes,
+                        statusProcessamento: "RECEBIDO"
+                    },
+                    include: {
+                        organizacao: true
+                    }
+                });
+
+                await tx.registroAuditoria.create({
+                    data: {
+                        usuarioId,
+                        acao: "CRIAR",
+                        entidade: "Lote",
+                        entidadeId: lote.id,
+                        detalhes: {
+                            organizacaoId: lote.organizacaoId,
+                            notaFiscal: lote.notaFiscal,
+                            transportadora: lote.transportadora,
+                            status: lote.statusProcessamento
+                        }
+                    }
+                });
+
+                return lote;
             });
         } catch (erro) {
             if (
-                erro instanceof Prisma.PrismaClientKnownRequestError
-                && erro.code === "P2002"
+                erro instanceof Prisma.PrismaClientKnownRequestError &&
+                erro.code === "P2002"
             ) {
                 throw new AppError(
                     "Não foi possível gerar um identificador único para o lote. Tente novamente.",
@@ -168,8 +190,8 @@ export default class ServicoLote {
         dataFim: Date
     ) {
         if (
-            Number.isNaN(dataInicio.getTime())
-            || Number.isNaN(dataFim.getTime())
+            Number.isNaN(dataInicio.getTime()) ||
+            Number.isNaN(dataFim.getTime())
         ) {
             throw new AppError(
                 "Informe datas válidas para o período.",
@@ -202,164 +224,211 @@ export default class ServicoLote {
         });
     }
 
-    async editarLote(id: string, dados: DadosEdicaoLote) {
-        const lote = await prisma.lote.findUnique({
-            where: { id },
-            select: {
-                id: true,
-                statusProcessamento: true
-            }
-        });
-
-        if (!lote) {
-            throw new AppError(
-                "Lote não encontrado.",
-                404,
-                "LOTE_NAO_ENCONTRADO"
-            );
-        }
-
-        if (lote.statusProcessamento !== "RECEBIDO") {
-            throw new AppError(
-                "Somente lotes com status RECEBIDO podem ser editados.",
-                409,
-                "LOTE_NAO_EDITAVEL"
-            );
-        }
-
-        const atualizacao: Prisma.LoteUpdateInput = {};
-
-        if (dados.org !== undefined) {
-            const organizacaoId = dados.org.trim();
-
-            if (!organizacaoId) {
-                throw new AppError(
-                    "A organização não pode ser vazia.",
-                    400,
-                    "ORGANIZACAO_INVALIDA"
-                );
-            }
-
-            const organizacao = await prisma.organizacao.findUnique({
-                where: { id: organizacaoId },
-                select: { id: true }
+    async editarLote(
+        id: string,
+        dados: DadosEdicaoLote,
+        usuarioId: string | null = null
+    ) {
+        return prisma.$transaction(async (tx) => {
+            const lote = await tx.lote.findUnique({
+                where: { id },
+                select: {
+                    id: true,
+                    statusProcessamento: true,
+                    organizacaoId: true,
+                    notaFiscal: true,
+                    transportadora: true,
+                    dataEntrada: true,
+                    observacoes: true
+                }
             });
 
-            if (!organizacao) {
+            if (!lote) {
                 throw new AppError(
-                    "Organização não encontrada.",
+                    "Lote não encontrado.",
                     404,
-                    "ORGANIZACAO_NAO_ENCONTRADA"
+                    "LOTE_NAO_ENCONTRADO"
                 );
             }
 
-            atualizacao.organizacao = {
-                connect: { id: organizacaoId }
-            };
-        }
-
-        if (dados.nf !== undefined) {
-            if (!dados.nf.trim()) {
+            if (lote.statusProcessamento !== "RECEBIDO") {
                 throw new AppError(
-                    "A nota fiscal é obrigatória.",
-                    400,
-                    "NOTA_FISCAL_INVALIDA"
+                    "Somente lotes com status RECEBIDO podem ser editados.",
+                    409,
+                    "LOTE_NAO_EDITAVEL"
                 );
             }
 
-            atualizacao.notaFiscal = dados.nf.trim();
-        }
+            const atualizacao: Prisma.LoteUpdateInput = {};
 
-        if (dados.transp !== undefined) {
-            if (!dados.transp.trim()) {
+            if (dados.org !== undefined) {
+                const organizacaoId = dados.org.trim();
+
+                if (!organizacaoId) {
+                    throw new AppError(
+                        "A organização não pode ser vazia.",
+                        400,
+                        "ORGANIZACAO_INVALIDA"
+                    );
+                }
+
+                const organizacao = await tx.organizacao.findUnique({
+                    where: { id: organizacaoId },
+                    select: { id: true }
+                });
+
+                if (!organizacao) {
+                    throw new AppError(
+                        "Organização não encontrada.",
+                        404,
+                        "ORGANIZACAO_NAO_ENCONTRADA"
+                    );
+                }
+
+                atualizacao.organizacao = {
+                    connect: { id: organizacaoId }
+                };
+            }
+
+            if (dados.nf !== undefined) {
+                if (!dados.nf.trim()) {
+                    throw new AppError(
+                        "A nota fiscal é obrigatória.",
+                        400,
+                        "NOTA_FISCAL_INVALIDA"
+                    );
+                }
+
+                atualizacao.notaFiscal = dados.nf.trim();
+            }
+
+            if (dados.transp !== undefined) {
+                if (!dados.transp.trim()) {
+                    throw new AppError(
+                        "A transportadora é obrigatória.",
+                        400,
+                        "TRANSPORTADORA_INVALIDA"
+                    );
+                }
+
+                atualizacao.transportadora = dados.transp.trim();
+            }
+
+            if (dados.dataEntrada !== undefined) {
+                if (
+                    Number.isNaN(dados.dataEntrada.getTime()) ||
+                    dados.dataEntrada.getTime() > Date.now() ||
+                    dados.dataEntrada.getTime() <
+                    Date.now() - 90 * 24 * 60 * 60 * 1000
+                ) {
+                    throw new AppError(
+                        "A data de entrada deve estar entre hoje e os últimos 90 dias.",
+                        400,
+                        "DATA_ENTRADA_FORA_DO_PERIODO"
+                    );
+                }
+
+                atualizacao.dataEntrada = dados.dataEntrada;
+            }
+
+            if (dados.observacoes !== undefined) {
+                atualizacao.observacoes = dados.observacoes.trim();
+            }
+
+            if (Object.keys(atualizacao).length === 0) {
                 throw new AppError(
-                    "A transportadora é obrigatória.",
+                    "Informe pelo menos um campo para editar.",
                     400,
-                    "TRANSPORTADORA_INVALIDA"
+                    "NENHUM_CAMPO_INFORMADO"
                 );
             }
 
-            atualizacao.transportadora = dados.transp.trim();
-        }
+            const loteAtualizado = await tx.lote.update({
+                where: { id },
+                data: atualizacao,
+                include: {
+                    organizacao: true
+                }
+            });
 
-        if (dados.dataEntrada !== undefined) {
-            if (
-                Number.isNaN(dados.dataEntrada.getTime())
-                || dados.dataEntrada.getTime() > Date.now()
-                || dados.dataEntrada.getTime() < Date.now() - 90 * 24 * 60 * 60 * 1000
-            ) {
-                throw new AppError(
-                    "A data de entrada deve estar entre hoje e os últimos 90 dias.",
-                    400,
-                    "DATA_ENTRADA_FORA_DO_PERIODO"
-                );
-            }
+            await tx.registroAuditoria.create({
+                data: {
+                    usuarioId,
+                    acao: "EDITAR",
+                    entidade: "Lote",
+                    entidadeId: id,
+                    detalhes: {
+                        camposAlterados: Object.keys(dados),
+                        statusAnterior: lote.statusProcessamento
+                    }
+                }
+            });
 
-            atualizacao.dataEntrada = dados.dataEntrada;
-        }
-
-        if (dados.observacoes !== undefined) {
-            atualizacao.observacoes = dados.observacoes.trim();
-        }
-
-        if (Object.keys(atualizacao).length === 0) {
-            throw new AppError(
-                "Informe pelo menos um campo para editar.",
-                400,
-                "NENHUM_CAMPO_INFORMADO"
-            );
-        }
-
-        return prisma.lote.update({
-            where: { id },
-            data: atualizacao,
-            include: {
-                organizacao: true
-            }
+            return loteAtualizado;
         });
     }
 
-    async cancelarLote(id: string) {
-        const lote = await prisma.lote.findUnique({
-            where: { id },
-            select: {
-                id: true,
-                statusProcessamento: true
+    async cancelarLote(
+        id: string,
+        usuarioId: string | null = null
+    ) {
+        return prisma.$transaction(async (tx) => {
+            const lote = await tx.lote.findUnique({
+                where: { id },
+                select: {
+                    id: true,
+                    statusProcessamento: true
+                }
+            });
+
+            if (!lote) {
+                throw new AppError(
+                    "Lote não encontrado.",
+                    404,
+                    "LOTE_NAO_ENCONTRADO"
+                );
             }
-        });
 
-        if (!lote) {
-            throw new AppError(
-                "Lote não encontrado.",
-                404,
-                "LOTE_NAO_ENCONTRADO"
-            );
-        }
-
-        if (lote.statusProcessamento === "CANCELADO") {
-            throw new AppError(
-                "O lote já está cancelado.",
-                409,
-                "LOTE_JA_CANCELADO"
-            );
-        }
-
-        if (lote.statusProcessamento !== "RECEBIDO") {
-            throw new AppError(
-                "Somente lotes com status RECEBIDO podem ser cancelados.",
-                409,
-                "STATUS_NAO_PERMITE_CANCELAMENTO"
-            );
-        }
-
-        return prisma.lote.update({
-            where: { id },
-            data: {
-                statusProcessamento: "CANCELADO"
-            },
-            include: {
-                organizacao: true
+            if (lote.statusProcessamento === "CANCELADO") {
+                throw new AppError(
+                    "O lote já está cancelado.",
+                    409,
+                    "LOTE_JA_CANCELADO"
+                );
             }
+
+            if (lote.statusProcessamento !== "RECEBIDO") {
+                throw new AppError(
+                    "Somente lotes com status RECEBIDO podem ser cancelados.",
+                    409,
+                    "STATUS_NAO_PERMITE_CANCELAMENTO"
+                );
+            }
+
+            const loteCancelado = await tx.lote.update({
+                where: { id },
+                data: {
+                    statusProcessamento: "CANCELADO"
+                },
+                include: {
+                    organizacao: true
+                }
+            });
+
+            await tx.registroAuditoria.create({
+                data: {
+                    usuarioId,
+                    acao: "CANCELAR",
+                    entidade: "Lote",
+                    entidadeId: id,
+                    detalhes: {
+                        statusAnterior: lote.statusProcessamento,
+                        statusNovo: "CANCELADO"
+                    }
+                }
+            });
+
+            return loteCancelado;
         });
     }
 }

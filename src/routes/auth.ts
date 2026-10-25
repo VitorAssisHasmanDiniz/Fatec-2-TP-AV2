@@ -44,7 +44,9 @@ router.post("/login", limiteLogin, async (req, res, next) => {
 
         const resultado = await servicoAutenticacao.autenticar(
             usuario.trim(),
-            senha
+            senha,
+            req.ip,
+            req.get("user-agent") ?? undefined
         );
 
         res.json({

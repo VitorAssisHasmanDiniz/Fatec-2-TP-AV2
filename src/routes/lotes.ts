@@ -4,6 +4,7 @@ import autenticar from "../middlewares/autenticar.js";
 import autorizar from "../middlewares/autorizar.js";
 import AppError from "../errors/AppError.js";
 import type { DadosEdicaoLote } from "../services/ServicoLote.js";
+import type { RequisicaoAutenticada } from "../middlewares/autenticar.js";
 
 const router = Router();
 const servico = new ServicoLote();
@@ -36,8 +37,8 @@ router.get("/", async (req, res, next) => {
 
         if (status !== undefined) {
             if (
-                typeof status !== "string"
-                || !statusPermitidos.includes(status as StatusLotePermitido)
+                typeof status !== "string" ||
+                !statusPermitidos.includes(status as StatusLotePermitido)
             ) {
                 throw new AppError(
                     "Status inválido.",
@@ -50,8 +51,8 @@ router.get("/", async (req, res, next) => {
         }
 
         if (
-            (dataInicio !== undefined && typeof dataInicio !== "string")
-            || (dataFim !== undefined && typeof dataFim !== "string")
+            (dataInicio !== undefined && typeof dataInicio !== "string") ||
+            (dataFim !== undefined && typeof dataFim !== "string")
         ) {
             throw new AppError(
                 "As datas devem ser informadas no formato ISO.",
@@ -69,8 +70,8 @@ router.get("/", async (req, res, next) => {
             : undefined;
 
         if (
-            (inicio && Number.isNaN(inicio.getTime()))
-            || (fim && Number.isNaN(fim.getTime()))
+            (inicio && Number.isNaN(inicio.getTime())) ||
+            (fim && Number.isNaN(fim.getTime()))
         ) {
             throw new AppError(
                 "Informe datas válidas para o período.",
@@ -128,9 +129,9 @@ router.post("/", async (req, res, next) => {
         } = req.body;
 
         if (
-            typeof org !== "string"
-            || typeof nf !== "string"
-            || typeof transp !== "string"
+            typeof org !== "string" ||
+            typeof nf !== "string" ||
+            typeof transp !== "string"
         ) {
             throw new AppError(
                 "Informe org, nf e transp como textos.",
@@ -140,8 +141,8 @@ router.post("/", async (req, res, next) => {
         }
 
         if (
-            dataEntrada !== undefined
-            && typeof dataEntrada !== "string"
+            dataEntrada !== undefined &&
+            typeof dataEntrada !== "string"
         ) {
             throw new AppError(
                 "dataEntrada deve ser uma data em formato ISO.",
@@ -151,8 +152,8 @@ router.post("/", async (req, res, next) => {
         }
 
         if (
-            observacoes !== undefined
-            && typeof observacoes !== "string"
+            observacoes !== undefined &&
+            typeof observacoes !== "string"
         ) {
             throw new AppError(
                 "observacoes deve ser um texto.",
@@ -161,15 +162,20 @@ router.post("/", async (req, res, next) => {
             );
         }
 
-        const lote = await servico.criarLote({
-            org,
-            nf,
-            transp,
-            dataEntrada: dataEntrada === undefined
-                ? undefined
-                : new Date(dataEntrada),
-            observacoes
-        });
+        const requisicao = req as RequisicaoAutenticada;
+
+        const lote = await servico.criarLote(
+            {
+                org,
+                nf,
+                transp,
+                dataEntrada: dataEntrada === undefined
+                    ? undefined
+                    : new Date(dataEntrada),
+                observacoes
+            },
+            requisicao.usuario!.id
+        );
 
         return res.status(201).json({
             nivel: "SUCESSO",
@@ -183,7 +189,12 @@ router.post("/", async (req, res, next) => {
 
 router.patch("/:id/cancelar", async (req, res, next) => {
     try {
-        const lote = await servico.cancelarLote(req.params.id);
+        const requisicao = req as RequisicaoAutenticada;
+
+        const lote = await servico.cancelarLote(
+            req.params.id,
+            requisicao.usuario!.id
+        );
 
         return res.status(200).json({
             nivel: "SUCESSO",
@@ -206,11 +217,11 @@ router.patch("/:id", async (req, res, next) => {
         } = req.body;
 
         if (
-            (org !== undefined && typeof org !== "string")
-            || (nf !== undefined && typeof nf !== "string")
-            || (transp !== undefined && typeof transp !== "string")
-            || (dataEntrada !== undefined && typeof dataEntrada !== "string")
-            || (observacoes !== undefined && typeof observacoes !== "string")
+            (org !== undefined && typeof org !== "string") ||
+            (nf !== undefined && typeof nf !== "string") ||
+            (transp !== undefined && typeof transp !== "string") ||
+            (dataEntrada !== undefined && typeof dataEntrada !== "string") ||
+            (observacoes !== undefined && typeof observacoes !== "string")
         ) {
             throw new AppError(
                 "Os campos enviados possuem tipos inválidos.",
@@ -229,9 +240,12 @@ router.patch("/:id", async (req, res, next) => {
             observacoes
         };
 
+        const requisicao = req as RequisicaoAutenticada;
+
         const lote = await servico.editarLote(
             req.params.id,
-            dados
+            dados,
+            requisicao.usuario!.id
         );
 
         return res.status(200).json({

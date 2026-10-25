@@ -56,33 +56,57 @@ export default class ServicoEquipamento {
         EstadoFisico.INSERVIVEL
     ];
 
-    private validarTexto(valor: string | undefined, campo: string, obrigatorio = false): string | undefined {
+    private validarTexto(
+        valor: string | undefined,
+        campo: string,
+        obrigatorio = false
+    ): string | undefined {
         if (valor === undefined) return undefined;
 
         const texto = valor.trim();
 
         if (obrigatorio && !texto) {
-            throw new AppError(`O campo ${campo} é obrigatório.`, 400, "CAMPO_OBRIGATORIO");
+            throw new AppError(
+                `O campo ${campo} é obrigatório.`,
+                400,
+                "CAMPO_OBRIGATORIO"
+            );
         }
 
         return texto;
     }
 
     private validarAno(ano: number): void {
-        if (!Number.isInteger(ano) || ano < 1900 || ano > new Date().getFullYear()) {
-            throw new AppError("Ano de fabricação inválido.", 400, "ANO_INVALIDO");
+        if (
+            !Number.isInteger(ano) ||
+            ano < 1900 ||
+            ano > new Date().getFullYear()
+        ) {
+            throw new AppError(
+                "Ano de fabricação inválido.",
+                400,
+                "ANO_INVALIDO"
+            );
         }
     }
 
     private validarPeso(peso: number): void {
         if (!Number.isFinite(peso) || peso < 0) {
-            throw new AppError("Peso deve ser um número maior ou igual a zero.", 400, "PESO_INVALIDO");
+            throw new AppError(
+                "Peso deve ser um número maior ou igual a zero.",
+                400,
+                "PESO_INVALIDO"
+            );
         }
     }
 
     private validarPosicao(posicao: number): void {
         if (!Number.isInteger(posicao) || posicao < 0) {
-            throw new AppError("Posição no lote deve ser um inteiro maior ou igual a zero.", 400, "POSICAO_INVALIDA");
+            throw new AppError(
+                "Posição no lote deve ser um inteiro maior ou igual a zero.",
+                400,
+                "POSICAO_INVALIDA"
+            );
         }
     }
 
@@ -90,19 +114,34 @@ export default class ServicoEquipamento {
         const prefixo = this.prefixos[tipo];
 
         if (!prefixo) {
-            throw new AppError("Tipo de equipamento inválido.", 400, "TIPO_INVALIDO");
+            throw new AppError(
+                "Tipo de equipamento inválido.",
+                400,
+                "TIPO_INVALIDO"
+            );
         }
 
         return `${prefixo}-${new Date().getFullYear()}-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
     }
 
-    async cadastrarEquipamento(dados: DadosEquipamento) {
+    async cadastrarEquipamento(
+        dados: DadosEquipamento,
+        usuarioId: string | null = null
+    ) {
         if (!dados.loteId?.trim()) {
-            throw new AppError("O lote é obrigatório.", 400, "LOTE_OBRIGATORIO");
+            throw new AppError(
+                "O lote é obrigatório.",
+                400,
+                "LOTE_OBRIGATORIO"
+            );
         }
 
         if (!Object.values(TipoEquipamento).includes(dados.tipo)) {
-            throw new AppError("Tipo de equipamento inválido.", 400, "TIPO_INVALIDO");
+            throw new AppError(
+                "Tipo de equipamento inválido.",
+                400,
+                "TIPO_INVALIDO"
+            );
         }
 
         const ano = dados.anoFabricacao;
@@ -117,7 +156,11 @@ export default class ServicoEquipamento {
         const estado = dados.estadoFisico ?? EstadoFisico.NOVO;
 
         if (!this.estadosFisicos.includes(estado)) {
-            throw new AppError("Estado físico inválido.", 400, "ESTADO_FISICO_INVALIDO");
+            throw new AppError(
+                "Estado físico inválido.",
+                400,
+                "ESTADO_FISICO_INVALIDO"
+            );
         }
 
         const lote = await prisma.lote.findUnique({
@@ -125,33 +168,65 @@ export default class ServicoEquipamento {
         });
 
         if (!lote) {
-            throw new AppError("Lote não encontrado.", 404, "LOTE_NAO_ENCONTRADO");
+            throw new AppError(
+                "Lote não encontrado.",
+                404,
+                "LOTE_NAO_ENCONTRADO"
+            );
         }
 
-        if (lote.statusProcessamento === "CANCELADO" || lote.statusProcessamento === "FINALIZADO") {
-            throw new AppError("Não é possível cadastrar equipamentos em um lote cancelado ou finalizado.", 409, "LOTE_NAO_RECEBE_EQUIPAMENTOS");
+        if (
+            lote.statusProcessamento === "CANCELADO" ||
+            lote.statusProcessamento === "FINALIZADO"
+        ) {
+            throw new AppError(
+                "Não é possível cadastrar equipamentos em um lote cancelado ou finalizado.",
+                409,
+                "LOTE_NAO_RECEBE_EQUIPAMENTOS"
+            );
         }
 
-        const equipamento = await prisma.equipamento.create({
-            data: {
-                codigoBarrasInterno: this.gerarCodigoBarras(dados.tipo),
-                tipo: dados.tipo,
-                marca: this.validarTexto(dados.marca, "marca") ?? "",
-                modelo: this.validarTexto(dados.modelo, "modelo") ?? "",
-                anoFabricacao: ano,
-                estadoFisico: estado,
-                pesoQuilogramas: peso,
-                loteId: dados.loteId,
-                posicaoNoLote: posicao,
-                statusRastreamento: StatusRastreamento.AGUARDANDO_TRIAGEM
-            },
-            include: {
-                lote: true,
-                historicoMovimentacao: true
-            }
+        return prisma.$transaction(async (tx) => {
+            const equipamento = await tx.equipamento.create({
+                data: {
+                    codigoBarrasInterno: this.gerarCodigoBarras(dados.tipo),
+                    tipo: dados.tipo,
+                    marca: this.validarTexto(dados.marca, "marca") ?? "",
+                    modelo: this.validarTexto(dados.modelo, "modelo") ?? "",
+                    anoFabricacao: ano,
+                    estadoFisico: estado,
+                    pesoQuilogramas: peso,
+                    loteId: dados.loteId,
+                    posicaoNoLote: posicao,
+                    statusRastreamento: StatusRastreamento.AGUARDANDO_TRIAGEM
+                },
+                include: {
+                    lote: true,
+                    historicoMovimentacao: true
+                }
+            });
+
+            await tx.registroAuditoria.create({
+                data: {
+                    usuarioId,
+                    acao: "CRIAR",
+                    entidade: "Equipamento",
+                    entidadeId: equipamento.id,
+                    detalhes: {
+                        codigoBarrasInterno: equipamento.codigoBarrasInterno,
+                        tipo: equipamento.tipo,
+                        loteId: equipamento.loteId,
+                        marca: equipamento.marca,
+                        modelo: equipamento.modelo,
+                        anoFabricacao: equipamento.anoFabricacao,
+                        estadoFisico: equipamento.estadoFisico,
+                        statusRastreamento: equipamento.statusRastreamento
+                    }
+                }
+            });
+
+            return equipamento;
         });
-
-        return equipamento;
     }
 
     async listarEquipamentos(filtros: FiltrosEquipamento = {}) {
@@ -160,7 +235,9 @@ export default class ServicoEquipamento {
         if (filtros.loteId) where.loteId = filtros.loteId;
         if (filtros.tipo) where.tipo = filtros.tipo;
         if (filtros.estadoFisico) where.estadoFisico = filtros.estadoFisico;
-        if (filtros.statusRastreamento) where.statusRastreamento = filtros.statusRastreamento;
+        if (filtros.statusRastreamento) {
+            where.statusRastreamento = filtros.statusRastreamento;
+        }
 
         return prisma.equipamento.findMany({
             where,
@@ -186,42 +263,108 @@ export default class ServicoEquipamento {
         });
 
         if (!equipamento) {
-            throw new AppError("Equipamento não encontrado.", 404, "EQUIPAMENTO_NAO_ENCONTRADO");
+            throw new AppError(
+                "Equipamento não encontrado.",
+                404,
+                "EQUIPAMENTO_NAO_ENCONTRADO"
+            );
         }
 
         return equipamento;
     }
 
-    async editarEquipamento(id: string, dados: DadosEdicaoEquipamento) {
-        await this.buscarEquipamento(id);
+    async editarEquipamento(
+        id: string,
+        dados: DadosEdicaoEquipamento,
+        usuarioId: string | null = null
+    ) {
+        const equipamento = await this.buscarEquipamento(id);
 
-        if (dados.anoFabricacao !== undefined) this.validarAno(dados.anoFabricacao);
-        if (dados.pesoQuilogramas !== undefined) this.validarPeso(dados.pesoQuilogramas);
-        if (dados.posicaoNoLote !== undefined) this.validarPosicao(dados.posicaoNoLote);
+        if (dados.anoFabricacao !== undefined) {
+            this.validarAno(dados.anoFabricacao);
+        }
 
-        return prisma.equipamento.update({
-            where: { id },
-            data: {
-                ...(dados.marca !== undefined && { marca: this.validarTexto(dados.marca, "marca") }),
-                ...(dados.modelo !== undefined && { modelo: this.validarTexto(dados.modelo, "modelo") }),
-                ...(dados.anoFabricacao !== undefined && { anoFabricacao: dados.anoFabricacao }),
-                ...(dados.pesoQuilogramas !== undefined && { pesoQuilogramas: dados.pesoQuilogramas }),
-                ...(dados.posicaoNoLote !== undefined && { posicaoNoLote: dados.posicaoNoLote })
-            },
-            include: {
-                lote: true,
-                historicoMovimentacao: {
-                    orderBy: { dataHora: "desc" }
+        if (dados.pesoQuilogramas !== undefined) {
+            this.validarPeso(dados.pesoQuilogramas);
+        }
+
+        if (dados.posicaoNoLote !== undefined) {
+            this.validarPosicao(dados.posicaoNoLote);
+        }
+
+        return prisma.$transaction(async (tx) => {
+            const atualizado = await tx.equipamento.update({
+                where: { id },
+                data: {
+                    ...(dados.marca !== undefined && {
+                        marca: this.validarTexto(dados.marca, "marca")
+                    }),
+                    ...(dados.modelo !== undefined && {
+                        modelo: this.validarTexto(dados.modelo, "modelo")
+                    }),
+                    ...(dados.anoFabricacao !== undefined && {
+                        anoFabricacao: dados.anoFabricacao
+                    }),
+                    ...(dados.pesoQuilogramas !== undefined && {
+                        pesoQuilogramas: dados.pesoQuilogramas
+                    }),
+                    ...(dados.posicaoNoLote !== undefined && {
+                        posicaoNoLote: dados.posicaoNoLote
+                    })
+                },
+                include: {
+                    lote: true,
+                    historicoMovimentacao: {
+                        orderBy: { dataHora: "desc" }
+                    }
                 }
-            }
+            });
+
+            await tx.registroAuditoria.create({
+                data: {
+                    usuarioId,
+                    acao: "EDITAR",
+                    entidade: "Equipamento",
+                    entidadeId: id,
+                    detalhes: {
+                        camposAlterados: Object.keys(dados),
+                        antes: {
+                            marca: equipamento.marca,
+                            modelo: equipamento.modelo,
+                            anoFabricacao: equipamento.anoFabricacao,
+                            pesoQuilogramas: equipamento.pesoQuilogramas,
+                            posicaoNoLote: equipamento.posicaoNoLote
+                        },
+                        depois: {
+                            marca: atualizado.marca,
+                            modelo: atualizado.modelo,
+                            anoFabricacao: atualizado.anoFabricacao,
+                            pesoQuilogramas: atualizado.pesoQuilogramas,
+                            posicaoNoLote: atualizado.posicaoNoLote
+                        }
+                    }
+                }
+            });
+
+            return atualizado;
         });
     }
 
-    async atualizarEstadoFisico(id: string, novoEstado: EstadoFisico, observacao = "", responsavel = "SISTEMA") {
+    async atualizarEstadoFisico(
+        id: string,
+        novoEstado: EstadoFisico,
+        observacao = "",
+        responsavel = "SISTEMA",
+        usuarioId: string | null = null
+    ) {
         const equipamento = await this.buscarEquipamento(id);
 
         if (!this.estadosFisicos.includes(novoEstado)) {
-            throw new AppError("Estado físico inválido.", 400, "ESTADO_FISICO_INVALIDO");
+            throw new AppError(
+                "Estado físico inválido.",
+                400,
+                "ESTADO_FISICO_INVALIDO"
+            );
         }
 
         const estadoAtual = this.estadosFisicos.indexOf(equipamento.estadoFisico);
@@ -263,19 +406,48 @@ export default class ServicoEquipamento {
                 }
             });
 
+            await tx.registroAuditoria.create({
+                data: {
+                    usuarioId,
+                    acao: "ALTERAR_ESTADO_FISICO",
+                    entidade: "Equipamento",
+                    entidadeId: id,
+                    detalhes: {
+                        estadoAnterior: equipamento.estadoFisico,
+                        estadoNovo: novoEstado,
+                        responsavel: responsavel.trim(),
+                        observacao: observacao.trim()
+                    }
+                }
+            });
+
             return atualizado;
         });
     }
 
-    async atualizarStatus(id: string, novoStatus: StatusRastreamento, responsavel: string, observacao = "") {
+    async atualizarStatus(
+        id: string,
+        novoStatus: StatusRastreamento,
+        responsavel: string,
+        observacao = "",
+        usuarioId: string | null = null
+    ) {
         const equipamento = await this.buscarEquipamento(id);
 
         if (!Object.values(StatusRastreamento).includes(novoStatus)) {
-            throw new AppError("Status de rastreamento inválido.", 400, "STATUS_INVALIDO");
+            throw new AppError(
+                "Status de rastreamento inválido.",
+                400,
+                "STATUS_INVALIDO"
+            );
         }
 
         if (!responsavel.trim()) {
-            throw new AppError("O responsável é obrigatório.", 400, "RESPONSAVEL_OBRIGATORIO");
+            throw new AppError(
+                "O responsável é obrigatório.",
+                400,
+                "RESPONSAVEL_OBRIGATORIO"
+            );
         }
 
         if (
@@ -289,9 +461,11 @@ export default class ServicoEquipamento {
             );
         }
 
-        if (equipamento.estadoFisico === EstadoFisico.INSERVIVEL &&
+        if (
+            equipamento.estadoFisico === EstadoFisico.INSERVIVEL &&
             novoStatus !== StatusRastreamento.EM_TRIAGEM &&
-            novoStatus !== StatusRastreamento.AGUARDANDO_DESMONTE) {
+            novoStatus !== StatusRastreamento.AGUARDANDO_DESMONTE
+        ) {
             throw new AppError(
                 "Equipamento inservível deve estar em triagem ou aguardando desmonte.",
                 409,
@@ -315,29 +489,74 @@ export default class ServicoEquipamento {
                 }
             });
 
+            await tx.registroAuditoria.create({
+                data: {
+                    usuarioId,
+                    acao: "ALTERAR_RASTREAMENTO",
+                    entidade: "Equipamento",
+                    entidadeId: id,
+                    detalhes: {
+                        statusAnterior: equipamento.statusRastreamento,
+                        statusNovo: novoStatus,
+                        responsavel: responsavel.trim(),
+                        observacao: observacao.trim()
+                    }
+                }
+            });
+
             return atualizado;
         });
     }
 
-    async registrarMovimentacao(id: string, destino: string, responsavel: string, observacao = "") {
+    async registrarMovimentacao(
+        id: string,
+        destino: string,
+        responsavel: string,
+        observacao = "",
+        usuarioId: string | null = null
+    ) {
         const equipamento = await this.buscarEquipamento(id);
         const destinoLimpo = destino.trim();
         const responsavelLimpo = responsavel.trim();
 
         if (!destinoLimpo || !responsavelLimpo) {
-            throw new AppError("Destino e responsável são obrigatórios.", 400, "DADOS_MOVIMENTACAO_INVALIDOS");
+            throw new AppError(
+                "Destino e responsável são obrigatórios.",
+                400,
+                "DADOS_MOVIMENTACAO_INVALIDOS"
+            );
         }
 
         const ultimaMovimentacao = equipamento.historicoMovimentacao[0];
 
-        return prisma.movimentacao.create({
-            data: {
-                equipamentoId: id,
-                origem: ultimaMovimentacao?.destino ?? "RECEBIMENTO",
-                destino: destinoLimpo,
-                responsavel: responsavelLimpo,
-                observacao: observacao.trim()
-            }
+        return prisma.$transaction(async (tx) => {
+            const movimentacao = await tx.movimentacao.create({
+                data: {
+                    equipamentoId: id,
+                    origem: ultimaMovimentacao?.destino ?? "RECEBIMENTO",
+                    destino: destinoLimpo,
+                    responsavel: responsavelLimpo,
+                    observacao: observacao.trim()
+                }
+            });
+
+            await tx.registroAuditoria.create({
+                data: {
+                    usuarioId,
+                    acao: "MOVIMENTAR",
+                    entidade: "Equipamento",
+                    entidadeId: id,
+                    detalhes: {
+                        movimentacaoId: movimentacao.id,
+                        origem: movimentacao.origem,
+                        destino: movimentacao.destino,
+                        responsavel: movimentacao.responsavel,
+                        observacao: movimentacao.observacao
+                    }
+                }
+            });
+
+            return movimentacao;
         });
     }
 
@@ -349,14 +568,29 @@ export default class ServicoEquipamento {
         };
     }
 
-    calcularDepreciacao(anoFabricacao: number, coeficiente = 0.1) {
+    calcularDepreciacao(
+        anoFabricacao: number,
+        coeficiente = 0.1
+    ) {
         this.validarAno(anoFabricacao);
 
-        if (!Number.isFinite(coeficiente) || coeficiente < 0 || coeficiente > 1) {
-            throw new AppError("Coeficiente de depreciação deve estar entre 0 e 1.", 400, "COEFICIENTE_INVALIDO");
+        if (
+            !Number.isFinite(coeficiente) ||
+            coeficiente < 0 ||
+            coeficiente > 1
+        ) {
+            throw new AppError(
+                "Coeficiente de depreciação deve estar entre 0 e 1.",
+                400,
+                "COEFICIENTE_INVALIDO"
+            );
         }
 
-        const idade = Math.max(0, new Date().getFullYear() - anoFabricacao);
+        const idade = Math.max(
+            0,
+            new Date().getFullYear() - anoFabricacao
+        );
+
         return Math.min(0.9, idade * coeficiente);
     }
 }

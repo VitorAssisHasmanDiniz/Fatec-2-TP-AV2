@@ -1,8 +1,10 @@
+
 import { Router } from "express";
 import ServicoOrganizacao from "../services/ServicoOrganizacao.js";
 import autenticar from "../middlewares/autenticar.js";
 import autorizar from "../middlewares/autorizar.js";
 import AppError from "../errors/AppError.js";
+import type { RequisicaoAutenticada } from "../middlewares/autenticar.js";
 
 const router = Router();
 const servico = new ServicoOrganizacao();
@@ -55,11 +57,11 @@ router.post("/", async (req, res, next) => {
         } = req.body;
 
         if (
-            typeof id !== "string"
-            || typeof razaoSocial !== "string"
-            || typeof cnpj !== "string"
-            || typeof vencimentoContrato !== "string"
-            || typeof valorMensal !== "number"
+            typeof id !== "string" ||
+            typeof razaoSocial !== "string" ||
+            typeof cnpj !== "string" ||
+            typeof vencimentoContrato !== "string" ||
+            typeof valorMensal !== "number"
         ) {
             throw new AppError(
                 "Informe id, razaoSocial, cnpj, vencimentoContrato e valorMensal com os tipos corretos.",
@@ -68,17 +70,22 @@ router.post("/", async (req, res, next) => {
             );
         }
 
-        const organizacao = await servico.cadastrarComDados({
-            id,
-            razaoSocial,
-            cnpj,
-            inscricaoEstadual,
-            enderecoCompleto,
-            telefone,
-            email,
-            vencimentoContrato: new Date(vencimentoContrato),
-            valorMensal
-        });
+        const requisicao = req as RequisicaoAutenticada;
+
+        const organizacao = await servico.cadastrarComDados(
+            {
+                id,
+                razaoSocial,
+                cnpj,
+                inscricaoEstadual,
+                enderecoCompleto,
+                telefone,
+                email,
+                vencimentoContrato: new Date(vencimentoContrato),
+                valorMensal
+            },
+            requisicao.usuario!.id
+        );
 
         return res.status(201).json({
             nivel: "SUCESSO",
@@ -92,7 +99,12 @@ router.post("/", async (req, res, next) => {
 
 router.patch("/:id/desativar", async (req, res, next) => {
     try {
-        const organizacao = await servico.desativarOrganizacao(req.params.id);
+        const requisicao = req as RequisicaoAutenticada;
+
+        const organizacao = await servico.desativarOrganizacao(
+            req.params.id,
+            requisicao.usuario!.id
+        );
 
         return res.status(200).json({
             nivel: "SUCESSO",
@@ -106,8 +118,11 @@ router.patch("/:id/desativar", async (req, res, next) => {
 
 router.patch("/:id/ativar", async (req, res, next) => {
     try {
+        const requisicao = req as RequisicaoAutenticada;
+
         const organizacao = await servico.ativarOrganizacao(
-            req.params.id
+            req.params.id,
+            requisicao.usuario!.id
         );
 
         return res.status(200).json({
@@ -132,9 +147,12 @@ router.patch("/:id/contrato/renovar", async (req, res, next) => {
             );
         }
 
+        const requisicao = req as RequisicaoAutenticada;
+
         const contrato = await servico.renovarContrato(
             req.params.id,
-            new Date(novoVencimento)
+            new Date(novoVencimento),
+            requisicao.usuario!.id
         );
 
         return res.status(200).json({

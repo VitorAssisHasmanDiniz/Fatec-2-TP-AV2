@@ -19,6 +19,11 @@ const papeisValidos: PapelUsuario[] = [
 
 router.use(autenticar, autorizar("ADMINISTRADOR"));
 
+function obterUsuarioId(req: import("express").Request): string {
+    const requisicao = req as RequisicaoAutenticada;
+    return requisicao.usuario!.id;
+}
+
 router.get("/", async (_req, res, next) => {
     try {
         const usuarios = await servicoUsuarios.listar();
@@ -52,11 +57,7 @@ router.get("/:id", async (req, res, next) => {
         const { id } = req.params;
 
         if (typeof id !== "string") {
-            throw new AppError(
-                "ID do usuário inválido",
-                400,
-                "ID_INVALIDO"
-            );
+            throw new AppError("ID do usuário inválido", 400, "ID_INVALIDO");
         }
 
         const usuario = await servicoUsuarios.buscarPorId(id);
@@ -96,7 +97,8 @@ router.post("/", async (req, res, next) => {
             nome,
             usuario,
             senha,
-            papel as PapelUsuario
+            papel as PapelUsuario,
+            obterUsuarioId(req)
         );
 
         res.status(201).json({
@@ -116,11 +118,7 @@ router.put("/:id", async (req, res, next) => {
             req.body ?? {};
 
         if (typeof id !== "string") {
-            throw new AppError(
-                "ID do usuário inválido",
-                400,
-                "ID_INVALIDO"
-            );
+            throw new AppError("ID do usuário inválido", 400, "ID_INVALIDO");
         }
 
         if (
@@ -159,12 +157,16 @@ router.put("/:id", async (req, res, next) => {
             );
         }
 
-        const usuarioAtualizado = await servicoUsuarios.atualizar(id, {
-            nome,
-            usuario,
-            senha,
-            papel,
-        });
+        const usuarioAtualizado = await servicoUsuarios.atualizar(
+            id,
+            {
+                nome,
+                usuario,
+                senha,
+                papel,
+            },
+            obterUsuarioId(req)
+        );
 
         res.json({
             nivel: "SUCESSO",
@@ -181,18 +183,12 @@ router.delete("/:id", async (req, res, next) => {
         const { id } = req.params;
 
         if (typeof id !== "string") {
-            throw new AppError(
-                "ID do usuário inválido",
-                400,
-                "ID_INVALIDO"
-            );
+            throw new AppError("ID do usuário inválido", 400, "ID_INVALIDO");
         }
-
-        const requisicao = req as RequisicaoAutenticada;
 
         const usuario = await servicoUsuarios.excluir(
             id,
-            requisicao.usuario!.id
+            obterUsuarioId(req)
         );
 
         res.json({
@@ -211,11 +207,7 @@ router.patch("/:id/status", async (req, res, next) => {
         const { ativo } = req.body ?? {};
 
         if (typeof id !== "string") {
-            throw new AppError(
-                "ID do usuário inválido",
-                400,
-                "ID_INVALIDO"
-            );
+            throw new AppError("ID do usuário inválido", 400, "ID_INVALIDO");
         }
 
         if (typeof ativo !== "boolean") {
@@ -226,7 +218,11 @@ router.patch("/:id/status", async (req, res, next) => {
             );
         }
 
-        const usuario = await servicoUsuarios.alterarStatus(id, ativo);
+        const usuario = await servicoUsuarios.alterarStatus(
+            id,
+            ativo,
+            obterUsuarioId(req)
+        );
 
         res.json({
             nivel: "SUCESSO",

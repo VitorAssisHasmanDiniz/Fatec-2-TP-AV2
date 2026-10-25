@@ -1,15 +1,25 @@
 import { Router, type Request, type Response } from "express";
-import { EstadoFisico, StatusRastreamento, TipoEquipamento } from "../../generated/prisma/client.js";
-import ServicoEquipamento, { type DadosEdicaoEquipamento, type DadosEquipamento } from "../services/ServicoEquipamento.js";
+import {
+    EstadoFisico,
+    StatusRastreamento,
+    TipoEquipamento
+} from "../../generated/prisma/client.js";
+import ServicoEquipamento, {
+    type DadosEdicaoEquipamento,
+    type DadosEquipamento
+} from "../services/ServicoEquipamento.js";
 import autenticar from "../middlewares/autenticar.js";
 import autorizar from "../middlewares/autorizar.js";
+import type { RequisicaoAutenticada } from "../middlewares/autenticar.js";
 
 const router = Router();
 const servico = new ServicoEquipamento();
 
 router.use(autenticar);
 
-function validarObjeto(valor: unknown): valor is Record<string, unknown> {
+function validarObjeto(
+    valor: unknown
+): valor is Record<string, unknown> {
     return typeof valor === "object" && valor !== null && !Array.isArray(valor);
 }
 
@@ -17,7 +27,8 @@ function validarEnum<T extends Record<string, string>>(
     enumeracao: T,
     valor: unknown
 ): valor is T[keyof T] {
-    return typeof valor === "string" && Object.values(enumeracao).includes(valor);
+    return typeof valor === "string" &&
+        Object.values(enumeracao).includes(valor);
 }
 
 function validarTexto(valor: unknown): valor is string {
@@ -47,9 +58,20 @@ function obterId(req: Request, res: Response): string | null {
     return id;
 }
 
+function obterUsuarioId(req: Request): string {
+    const requisicao = req as RequisicaoAutenticada;
+    return requisicao.usuario!.id;
+}
+
 // Listar equipamentos
-router.get("/",
-    autorizar("ADMINISTRADOR", "OPERADOR_CADASTRO", "GESTOR_ALMOXARIFADO", "AUDITOR"),
+router.get(
+    "/",
+    autorizar(
+        "ADMINISTRADOR",
+        "OPERADOR_CADASTRO",
+        "GESTOR_ALMOXARIFADO",
+        "AUDITOR"
+    ),
     async (req: Request, res: Response) => {
         const filtros: {
             loteId?: string;
@@ -60,8 +82,12 @@ router.get("/",
 
         if (req.query.loteId !== undefined) {
             if (!validarTexto(req.query.loteId)) {
-                return responderErroEntrada(res, "O filtro loteId deve ser um texto.");
+                return responderErroEntrada(
+                    res,
+                    "O filtro loteId deve ser um texto."
+                );
             }
+
             filtros.loteId = req.query.loteId;
         }
 
@@ -69,20 +95,29 @@ router.get("/",
             if (!validarEnum(TipoEquipamento, req.query.tipo)) {
                 return responderErroEntrada(res, "Filtro tipo inválido.");
             }
+
             filtros.tipo = req.query.tipo;
         }
 
         if (req.query.estadoFisico !== undefined) {
             if (!validarEnum(EstadoFisico, req.query.estadoFisico)) {
-                return responderErroEntrada(res, "Filtro estadoFisico inválido.");
+                return responderErroEntrada(
+                    res,
+                    "Filtro estadoFisico inválido."
+                );
             }
+
             filtros.estadoFisico = req.query.estadoFisico;
         }
 
         if (req.query.statusRastreamento !== undefined) {
             if (!validarEnum(StatusRastreamento, req.query.statusRastreamento)) {
-                return responderErroEntrada(res, "Filtro statusRastreamento inválido.");
+                return responderErroEntrada(
+                    res,
+                    "Filtro statusRastreamento inválido."
+                );
             }
+
             filtros.statusRastreamento = req.query.statusRastreamento;
         }
 
@@ -97,8 +132,14 @@ router.get("/",
 );
 
 // Buscar histórico do equipamento
-router.get("/:id/rastreamento",
-    autorizar("ADMINISTRADOR", "OPERADOR_CADASTRO", "GESTOR_ALMOXARIFADO", "AUDITOR"),
+router.get(
+    "/:id/rastreamento",
+    autorizar(
+        "ADMINISTRADOR",
+        "OPERADOR_CADASTRO",
+        "GESTOR_ALMOXARIFADO",
+        "AUDITOR"
+    ),
     async (req: Request, res: Response) => {
         const id = obterId(req, res);
         if (id === null) return;
@@ -114,14 +155,22 @@ router.get("/:id/rastreamento",
 );
 
 // Calcular depreciação do equipamento
-router.get("/:id/depreciacao",
-    autorizar("ADMINISTRADOR", "OPERADOR_CADASTRO", "GESTOR_ALMOXARIFADO", "AUDITOR"),
+router.get(
+    "/:id/depreciacao",
+    autorizar(
+        "ADMINISTRADOR",
+        "OPERADOR_CADASTRO",
+        "GESTOR_ALMOXARIFADO",
+        "AUDITOR"
+    ),
     async (req: Request, res: Response) => {
         const id = obterId(req, res);
         if (id === null) return;
 
         const equipamento = await servico.buscarEquipamento(id);
-        const depreciacao = servico.calcularDepreciacao(equipamento.anoFabricacao);
+        const depreciacao = servico.calcularDepreciacao(
+            equipamento.anoFabricacao
+        );
 
         return res.status(200).json({
             nivel: "SUCESSO",
@@ -138,8 +187,14 @@ router.get("/:id/depreciacao",
 );
 
 // Buscar equipamento por ID
-router.get("/:id",
-    autorizar("ADMINISTRADOR", "OPERADOR_CADASTRO", "GESTOR_ALMOXARIFADO", "AUDITOR"),
+router.get(
+    "/:id",
+    autorizar(
+        "ADMINISTRADOR",
+        "OPERADOR_CADASTRO",
+        "GESTOR_ALMOXARIFADO",
+        "AUDITOR"
+    ),
     async (req: Request, res: Response) => {
         const id = obterId(req, res);
         if (id === null) return;
@@ -155,17 +210,24 @@ router.get("/:id",
 );
 
 // Cadastrar equipamento
-router.post("/",
+router.post(
+    "/",
     autorizar("ADMINISTRADOR", "OPERADOR_CADASTRO"),
     async (req: Request, res: Response) => {
         if (!validarObjeto(req.body)) {
-            return responderErroEntrada(res, "O corpo da requisição deve ser um objeto JSON.");
+            return responderErroEntrada(
+                res,
+                "O corpo da requisição deve ser um objeto JSON."
+            );
         }
 
         const dados = req.body;
 
         if (!validarEnum(TipoEquipamento, dados.tipo)) {
-            return responderErroEntrada(res, "Tipo de equipamento inválido.");
+            return responderErroEntrada(
+                res,
+                "Tipo de equipamento inválido."
+            );
         }
 
         if (!validarTexto(dados.loteId)) {
@@ -173,7 +235,10 @@ router.post("/",
         }
 
         if (!validarNumero(dados.anoFabricacao)) {
-            return responderErroEntrada(res, "Ano de fabricação deve ser um número.");
+            return responderErroEntrada(
+                res,
+                "Ano de fabricação deve ser um número."
+            );
         }
 
         if (dados.marca !== undefined && typeof dados.marca !== "string") {
@@ -184,30 +249,55 @@ router.post("/",
             return responderErroEntrada(res, "Modelo deve ser um texto.");
         }
 
-        if (dados.estadoFisico !== undefined && !validarEnum(EstadoFisico, dados.estadoFisico)) {
+        if (
+            dados.estadoFisico !== undefined &&
+            !validarEnum(EstadoFisico, dados.estadoFisico)
+        ) {
             return responderErroEntrada(res, "Estado físico inválido.");
         }
 
-        if (dados.pesoQuilogramas !== undefined && !validarNumero(dados.pesoQuilogramas)) {
+        if (
+            dados.pesoQuilogramas !== undefined &&
+            !validarNumero(dados.pesoQuilogramas)
+        ) {
             return responderErroEntrada(res, "Peso deve ser um número.");
         }
 
-        if (dados.posicaoNoLote !== undefined && !validarNumero(dados.posicaoNoLote)) {
-            return responderErroEntrada(res, "Posição no lote deve ser um número.");
+        if (
+            dados.posicaoNoLote !== undefined &&
+            !validarNumero(dados.posicaoNoLote)
+        ) {
+            return responderErroEntrada(
+                res,
+                "Posição no lote deve ser um número."
+            );
         }
 
         const dadosEquipamento: DadosEquipamento = {
             tipo: dados.tipo,
             loteId: dados.loteId,
             anoFabricacao: dados.anoFabricacao,
-            ...(typeof dados.marca === "string" && { marca: dados.marca }),
-            ...(typeof dados.modelo === "string" && { modelo: dados.modelo }),
-            ...(validarEnum(EstadoFisico, dados.estadoFisico) && { estadoFisico: dados.estadoFisico }),
-            ...(typeof dados.pesoQuilogramas === "number" && { pesoQuilogramas: dados.pesoQuilogramas }),
-            ...(typeof dados.posicaoNoLote === "number" && { posicaoNoLote: dados.posicaoNoLote })
+            ...(typeof dados.marca === "string" && {
+                marca: dados.marca
+            }),
+            ...(typeof dados.modelo === "string" && {
+                modelo: dados.modelo
+            }),
+            ...(validarEnum(EstadoFisico, dados.estadoFisico) && {
+                estadoFisico: dados.estadoFisico
+            }),
+            ...(typeof dados.pesoQuilogramas === "number" && {
+                pesoQuilogramas: dados.pesoQuilogramas
+            }),
+            ...(typeof dados.posicaoNoLote === "number" && {
+                posicaoNoLote: dados.posicaoNoLote
+            })
         };
 
-        const equipamento = await servico.cadastrarEquipamento(dadosEquipamento);
+        const equipamento = await servico.cadastrarEquipamento(
+            dadosEquipamento,
+            obterUsuarioId(req)
+        );
 
         return res.status(201).json({
             nivel: "SUCESSO",
@@ -218,7 +308,8 @@ router.post("/",
 );
 
 // Registrar movimentação do equipamento
-router.post("/:id/movimentacoes",
+router.post(
+    "/:id/movimentacoes",
     autorizar("ADMINISTRADOR", "GESTOR_ALMOXARIFADO"),
     async (req: Request, res: Response) => {
         const id = obterId(req, res);
@@ -229,18 +320,30 @@ router.post("/:id/movimentacoes",
             !validarTexto(req.body.destino) ||
             !validarTexto(req.body.responsavel)
         ) {
-            return responderErroEntrada(res, "Destino e responsável são obrigatórios.");
+            return responderErroEntrada(
+                res,
+                "Destino e responsável são obrigatórios."
+            );
         }
 
-        if (req.body.observacao !== undefined && typeof req.body.observacao !== "string") {
-            return responderErroEntrada(res, "Observação deve ser um texto.");
+        if (
+            req.body.observacao !== undefined &&
+            typeof req.body.observacao !== "string"
+        ) {
+            return responderErroEntrada(
+                res,
+                "Observação deve ser um texto."
+            );
         }
 
         const movimentacao = await servico.registrarMovimentacao(
             id,
             req.body.destino,
             req.body.responsavel,
-            typeof req.body.observacao === "string" ? req.body.observacao : ""
+            typeof req.body.observacao === "string"
+                ? req.body.observacao
+                : "",
+            obterUsuarioId(req)
         );
 
         return res.status(201).json({
@@ -252,22 +355,38 @@ router.post("/:id/movimentacoes",
 );
 
 // Atualizar dados básicos
-router.patch("/:id",
+router.patch(
+    "/:id",
     autorizar("ADMINISTRADOR", "OPERADOR_CADASTRO"),
     async (req: Request, res: Response) => {
         const id = obterId(req, res);
         if (id === null) return;
 
         if (!validarObjeto(req.body)) {
-            return responderErroEntrada(res, "O corpo da requisição deve ser um objeto JSON.");
+            return responderErroEntrada(
+                res,
+                "O corpo da requisição deve ser um objeto JSON."
+            );
         }
 
         const dados = req.body;
-        const permitidos = ["marca", "modelo", "anoFabricacao", "pesoQuilogramas", "posicaoNoLote"];
+        const permitidos = [
+            "marca",
+            "modelo",
+            "anoFabricacao",
+            "pesoQuilogramas",
+            "posicaoNoLote"
+        ];
         const campos = Object.keys(dados);
 
-        if (campos.length === 0 || campos.some((campo) => !permitidos.includes(campo))) {
-            return responderErroEntrada(res, "Informe ao menos um campo permitido para edição.");
+        if (
+            campos.length === 0 ||
+            campos.some((campo) => !permitidos.includes(campo))
+        ) {
+            return responderErroEntrada(
+                res,
+                "Informe ao menos um campo permitido para edição."
+            );
         }
 
         if (dados.marca !== undefined && typeof dados.marca !== "string") {
@@ -278,27 +397,56 @@ router.patch("/:id",
             return responderErroEntrada(res, "Modelo deve ser um texto.");
         }
 
-        if (dados.anoFabricacao !== undefined && !validarNumero(dados.anoFabricacao)) {
-            return responderErroEntrada(res, "Ano de fabricação deve ser um número.");
+        if (
+            dados.anoFabricacao !== undefined &&
+            !validarNumero(dados.anoFabricacao)
+        ) {
+            return responderErroEntrada(
+                res,
+                "Ano de fabricação deve ser um número."
+            );
         }
 
-        if (dados.pesoQuilogramas !== undefined && !validarNumero(dados.pesoQuilogramas)) {
+        if (
+            dados.pesoQuilogramas !== undefined &&
+            !validarNumero(dados.pesoQuilogramas)
+        ) {
             return responderErroEntrada(res, "Peso deve ser um número.");
         }
 
-        if (dados.posicaoNoLote !== undefined && !validarNumero(dados.posicaoNoLote)) {
-            return responderErroEntrada(res, "Posição no lote deve ser um número.");
+        if (
+            dados.posicaoNoLote !== undefined &&
+            !validarNumero(dados.posicaoNoLote)
+        ) {
+            return responderErroEntrada(
+                res,
+                "Posição no lote deve ser um número."
+            );
         }
 
         const dadosEdicao: DadosEdicaoEquipamento = {
-            ...(typeof dados.marca === "string" && { marca: dados.marca }),
-            ...(typeof dados.modelo === "string" && { modelo: dados.modelo }),
-            ...(typeof dados.anoFabricacao === "number" && { anoFabricacao: dados.anoFabricacao }),
-            ...(typeof dados.pesoQuilogramas === "number" && { pesoQuilogramas: dados.pesoQuilogramas }),
-            ...(typeof dados.posicaoNoLote === "number" && { posicaoNoLote: dados.posicaoNoLote })
+            ...(typeof dados.marca === "string" && {
+                marca: dados.marca
+            }),
+            ...(typeof dados.modelo === "string" && {
+                modelo: dados.modelo
+            }),
+            ...(typeof dados.anoFabricacao === "number" && {
+                anoFabricacao: dados.anoFabricacao
+            }),
+            ...(typeof dados.pesoQuilogramas === "number" && {
+                pesoQuilogramas: dados.pesoQuilogramas
+            }),
+            ...(typeof dados.posicaoNoLote === "number" && {
+                posicaoNoLote: dados.posicaoNoLote
+            })
         };
 
-        const equipamento = await servico.editarEquipamento(id, dadosEdicao);
+        const equipamento = await servico.editarEquipamento(
+            id,
+            dadosEdicao,
+            obterUsuarioId(req)
+        );
 
         return res.status(200).json({
             nivel: "SUCESSO",
@@ -309,29 +457,48 @@ router.patch("/:id",
 );
 
 // Atualizar estado físico
-router.patch("/:id/estado-fisico",
+router.patch(
+    "/:id/estado-fisico",
     autorizar("ADMINISTRADOR", "GESTOR_ALMOXARIFADO"),
     async (req: Request, res: Response) => {
         const id = obterId(req, res);
         if (id === null) return;
 
-        if (!validarObjeto(req.body) || !validarEnum(EstadoFisico, req.body.estadoFisico)) {
-            return responderErroEntrada(res, "Informe um estadoFisico válido.");
+        if (
+            !validarObjeto(req.body) ||
+            !validarEnum(EstadoFisico, req.body.estadoFisico)
+        ) {
+            return responderErroEntrada(
+                res,
+                "Informe um estadoFisico válido."
+            );
         }
 
-        if (req.body.justificativa !== undefined && typeof req.body.justificativa !== "string") {
-            return responderErroEntrada(res, "Justificativa deve ser um texto.");
+        if (
+            req.body.justificativa !== undefined &&
+            typeof req.body.justificativa !== "string"
+        ) {
+            return responderErroEntrada(
+                res,
+                "Justificativa deve ser um texto."
+            );
         }
 
         if (!validarTexto(req.body.responsavel)) {
-            return responderErroEntrada(res, "Responsável é obrigatório.");
+            return responderErroEntrada(
+                res,
+                "Responsável é obrigatório."
+            );
         }
 
         const equipamento = await servico.atualizarEstadoFisico(
             id,
             req.body.estadoFisico,
-            typeof req.body.justificativa === "string" ? req.body.justificativa : "",
-            req.body.responsavel
+            typeof req.body.justificativa === "string"
+                ? req.body.justificativa
+                : "",
+            req.body.responsavel,
+            obterUsuarioId(req)
         );
 
         return res.status(200).json({
@@ -343,29 +510,48 @@ router.patch("/:id/estado-fisico",
 );
 
 // Atualizar status de rastreamento
-router.patch("/:id/rastreamento",
+router.patch(
+    "/:id/rastreamento",
     autorizar("ADMINISTRADOR", "GESTOR_ALMOXARIFADO"),
     async (req: Request, res: Response) => {
         const id = obterId(req, res);
         if (id === null) return;
 
-        if (!validarObjeto(req.body) || !validarEnum(StatusRastreamento, req.body.statusRastreamento)) {
-            return responderErroEntrada(res, "Informe um statusRastreamento válido.");
+        if (
+            !validarObjeto(req.body) ||
+            !validarEnum(StatusRastreamento, req.body.statusRastreamento)
+        ) {
+            return responderErroEntrada(
+                res,
+                "Informe um statusRastreamento válido."
+            );
         }
 
         if (!validarTexto(req.body.responsavel)) {
-            return responderErroEntrada(res, "Responsável é obrigatório.");
+            return responderErroEntrada(
+                res,
+                "Responsável é obrigatório."
+            );
         }
 
-        if (req.body.justificativa !== undefined && typeof req.body.justificativa !== "string") {
-            return responderErroEntrada(res, "Justificativa deve ser um texto.");
+        if (
+            req.body.justificativa !== undefined &&
+            typeof req.body.justificativa !== "string"
+        ) {
+            return responderErroEntrada(
+                res,
+                "Justificativa deve ser um texto."
+            );
         }
 
         const equipamento = await servico.atualizarStatus(
             id,
             req.body.statusRastreamento,
             req.body.responsavel,
-            typeof req.body.observacao === "string" ? req.body.observacao : ""
+            typeof req.body.observacao === "string"
+                ? req.body.observacao
+                : "",
+            obterUsuarioId(req)
         );
 
         return res.status(200).json({

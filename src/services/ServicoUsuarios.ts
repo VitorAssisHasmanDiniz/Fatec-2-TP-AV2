@@ -63,7 +63,8 @@ export default class ServicoUsuarios {
         nome: string,
         usuario: string,
         senha: string,
-        papel: PapelUsuario
+        papel: PapelUsuario,
+        usuarioId: string | null = null
     ) {
         const nomeFormatado = validarNome(nome);
         const nomeUsuario = validarUsuario(usuario);
@@ -85,21 +86,40 @@ export default class ServicoUsuarios {
 
         const senhaHash = await bcrypt.hash(senha, 12);
 
-        return prisma.usuario.create({
-            data: {
-                nome: nomeFormatado,
-                usuario: nomeUsuario,
-                senhaHash,
-                papel,
-            },
-            select: {
-                id: true,
-                nome: true,
-                usuario: true,
-                papel: true,
-                ativo: true,
-                criadoEm: true,
-            },
+        return prisma.$transaction(async (tx) => {
+            const novoUsuario = await tx.usuario.create({
+                data: {
+                    nome: nomeFormatado,
+                    usuario: nomeUsuario,
+                    senhaHash,
+                    papel,
+                },
+                select: {
+                    id: true,
+                    nome: true,
+                    usuario: true,
+                    papel: true,
+                    ativo: true,
+                    criadoEm: true,
+                },
+            });
+
+            await tx.registroAuditoria.create({
+                data: {
+                    usuarioId,
+                    acao: "CRIAR",
+                    entidade: "Usuario",
+                    entidadeId: novoUsuario.id,
+                    detalhes: {
+                        nome: novoUsuario.nome,
+                        usuario: novoUsuario.usuario,
+                        papel: novoUsuario.papel,
+                        ativo: novoUsuario.ativo,
+                    },
+                },
+            });
+
+            return novoUsuario;
         });
     }
 
@@ -170,7 +190,8 @@ export default class ServicoUsuarios {
             usuario?: string;
             senha?: string;
             papel?: PapelUsuario;
-        }
+        },
+        usuarioId: string | null = null
     ) {
         const existente = await prisma.usuario.findUnique({
             where: { id },
@@ -191,8 +212,11 @@ export default class ServicoUsuarios {
             papel?: PapelUsuario;
         } = {};
 
+        const camposAlterados: string[] = [];
+
         if (dados.nome !== undefined) {
             atualizacao.nome = validarNome(dados.nome);
+            camposAlterados.push("nome");
         }
 
         if (dados.usuario !== undefined) {
@@ -211,16 +235,19 @@ export default class ServicoUsuarios {
             }
 
             atualizacao.usuario = nomeUsuario;
+            camposAlterados.push("usuario");
         }
 
         if (dados.senha !== undefined) {
             validarSenha(dados.senha);
             atualizacao.senhaHash = await bcrypt.hash(dados.senha, 12);
+            camposAlterados.push("senha");
         }
 
         if (dados.papel !== undefined) {
             validarPapel(dados.papel);
             atualizacao.papel = dados.papel;
+            camposAlterados.push("papel");
         }
 
         if (Object.keys(atualizacao).length === 0) {
@@ -231,23 +258,55 @@ export default class ServicoUsuarios {
             );
         }
 
-        return prisma.usuario.update({
-            where: { id },
-            data: atualizacao,
-            select: {
-                id: true,
-                nome: true,
-                usuario: true,
-                papel: true,
-                ativo: true,
-                ultimoAcesso: true,
-                criadoEm: true,
-                atualizadoEm: true,
-            },
+        return prisma.$transaction(async (tx) => {
+            const usuarioAtualizado = await tx.usuario.update({
+                where: { id },
+                data: atualizacao,
+                select: {
+                    id: true,
+                    nome: true,
+                    usuario: true,
+                    papel: true,
+                    ativo: true,
+                    ultimoAcesso: true,
+                    criadoEm: true,
+                    atualizadoEm: true,
+                },
+            });
+
+            await tx.registroAuditoria.create({
+                data: {
+                    usuarioId,
+                    acao: "EDITAR",
+                    entidade: "Usuario",
+                    entidadeId: id,
+                    detalhes: {
+                        camposAlterados,
+                        antes: {
+                            nome: existente.nome,
+                            usuario: existente.usuario,
+                            papel: existente.papel,
+                            ativo: existente.ativo,
+                        },
+                        depois: {
+                            nome: usuarioAtualizado.nome,
+                            usuario: usuarioAtualizado.usuario,
+                            papel: usuarioAtualizado.papel,
+                            ativo: usuarioAtualizado.ativo,
+                        },
+                    },
+                },
+            });
+
+            return usuarioAtualizado;
         });
     }
 
-    async alterarStatus(id: string, ativo: boolean) {
+    async alterarStatus(
+        id: string,
+        ativo: boolean,
+        usuarioId: string | null = null
+    ) {
         const existente = await prisma.usuario.findUnique({
             where: { id },
         });
@@ -260,19 +319,44 @@ export default class ServicoUsuarios {
             );
         }
 
-        return prisma.usuario.update({
-            where: { id },
-            data: { ativo },
-            select: {
-                id: true,
-                nome: true,
-                usuario: true,
-                papel: true,
-                ativo: true,
-                ultimoAcesso: true,
-                criadoEm: true,
-                atualizadoEm: true,
-            },
+        if (existente.ativo === ativo) {
+            throw new AppError(
+                `O usuário já está ${ativo ? "ativo" : "inativo"}`,
+                400,
+                "STATUS_IGUAL"
+            );
+        }
+
+        return prisma.$transaction(async (tx) => {
+            const usuarioAtualizado = await tx.usuario.update({
+                where: { id },
+                data: { ativo },
+                select: {
+                    id: true,
+                    nome: true,
+                    usuario: true,
+                    papel: true,
+                    ativo: true,
+                    ultimoAcesso: true,
+                    criadoEm: true,
+                    atualizadoEm: true,
+                },
+            });
+
+            await tx.registroAuditoria.create({
+                data: {
+                    usuarioId,
+                    acao: "ALTERAR_STATUS",
+                    entidade: "Usuario",
+                    entidadeId: id,
+                    detalhes: {
+                        statusAnterior: existente.ativo ? "ATIVO" : "INATIVO",
+                        statusNovo: ativo ? "ATIVO" : "INATIVO",
+                    },
+                },
+            });
+
+            return usuarioAtualizado;
         });
     }
 
@@ -297,14 +381,31 @@ export default class ServicoUsuarios {
             );
         }
 
-        await prisma.usuario.delete({
-            where: { id },
-        });
+        return prisma.$transaction(async (tx) => {
+            await tx.registroAuditoria.create({
+                data: {
+                    usuarioId: idAdministrador,
+                    acao: "EXCLUIR",
+                    entidade: "Usuario",
+                    entidadeId: existente.id,
+                    detalhes: {
+                        nome: existente.nome,
+                        usuario: existente.usuario,
+                        papel: existente.papel,
+                        ativo: existente.ativo,
+                    },
+                },
+            });
 
-        return {
-            id: existente.id,
-            nome: existente.nome,
-            usuario: existente.usuario,
-        };
+            await tx.usuario.delete({
+                where: { id },
+            });
+
+            return {
+                id: existente.id,
+                nome: existente.nome,
+                usuario: existente.usuario,
+            };
+        });
     }
 }
