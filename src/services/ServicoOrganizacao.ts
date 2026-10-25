@@ -111,6 +111,27 @@ export default class ServicoOrganizacao {
                     }
                 });
 
+                if (organizacao.contratoVigente) {
+                    await tx.registroAuditoria.create({
+                        data: {
+                            usuarioId,
+                            acao: "CRIAR",
+                            entidade: "Contrato",
+                            entidadeId: organizacao.contratoVigente.id,
+                            detalhes: {
+                                organizacaoId: organizacao.id,
+                                dataVencimento:
+                                    organizacao.contratoVigente.dataVencimento.toISOString(),
+                                valorMensal:
+                                    organizacao.contratoVigente.valorMensal.toString(),
+                                clausulas: organizacao.contratoVigente.clausulas,
+                                renovacaoAutomatica:
+                                    organizacao.contratoVigente.renovacaoAutomatica
+                            }
+                        }
+                    });
+                }
+
                 return organizacao;
             });
         } catch (erro) {
@@ -326,13 +347,14 @@ export default class ServicoOrganizacao {
                 data: {
                     usuarioId,
                     acao: "RENOVAR_CONTRATO",
-                    entidade: "Organizacao",
-                    entidadeId: organizacaoId,
+                    entidade: "Contrato",
+                    entidadeId: contrato.id,
                     detalhes: {
-                        contratoId: contrato.id,
+                        organizacaoId,
                         vencimentoAnterior:
                             contrato.dataVencimento.toISOString(),
-                        novoVencimento: novoVencimento.toISOString()
+                        novoVencimento:
+                            contratoAtualizado.dataVencimento.toISOString()
                     }
                 }
             });

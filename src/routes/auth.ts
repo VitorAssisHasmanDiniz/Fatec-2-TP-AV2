@@ -14,7 +14,23 @@ const limiteLogin = rateLimit({
     limit: 5,
     standardHeaders: "draft-8",
     legacyHeaders: false,
-    handler: (_req, _res, next) => {
+    handler: async (req, _res, next) => {
+        try {
+            await prisma.registroAuditoria.create({
+                data: {
+                    acao: "LOGIN_BLOQUEADO",
+                    entidade: "Autenticacao",
+                    detalhes: {
+                        motivo: "LIMITE_LOGIN_EXCEDIDO"
+                    },
+                    ip: req.ip ?? null,
+                    userAgent: req.get("user-agent") ?? null
+                }
+            });
+        } catch {
+            // A falha na auditoria não deve ocultar o bloqueio de segurança.
+        }
+
         next(
             new AppError(
                 "Você errou a senha muitas vezes, vai ter q esperar paizão",
@@ -28,6 +44,19 @@ const limiteLogin = rateLimit({
 router.post("/login", limiteLogin, async (req, res, next) => {
     try {
         const { nome, usuario, senha } = req.body;
+        await prisma.registroAuditoria.create({
+            data: {
+                acao: "LOGIN_FALHOU",
+                entidade: "Autenticacao",
+                entidadeId:
+                    typeof usuario === "string" ? usuario.trim() : null,
+                detalhes: {
+                    motivo: "DADOS_INVALIDOS"
+                },
+                ip: req.ip ?? null,
+                userAgent: req.get("user-agent") ?? null
+            }
+        });
 
         if (
             typeof usuario !== "string" ||
@@ -87,6 +116,33 @@ router.get("/me", autenticar, async (req, res, next) => {
             nivel: "SUCESSO",
             mensagem: "Usuário autenticado recuperado com sucesso",
             dados: usuario,
+        });
+    } catch (erro) {
+        next(erro);
+    }
+});
+
+router.post("/logout", autenticar, async (req, res, next) => {
+    try {
+        const requisicao = req as RequisicaoAutenticada;
+
+        await prisma.registroAuditoria.create({
+            data: {
+                usuarioId: requisicao.usuario!.id,
+                acao: "LOGOUT",
+                entidade: "Autenticacao",
+                entidadeId: requisicao.usuario!.id,
+                detalhes: {
+                    motivo: "LOGOUT_SOLICITADO"
+                },
+                ip: req.ip ?? null,
+                userAgent: req.get("user-agent") ?? null
+            }
+        });
+
+        return res.status(200).json({
+            nivel: "SUCESSO",
+            mensagem: "Logout registrado. Descarte o token no cliente."
         });
     } catch (erro) {
         next(erro);

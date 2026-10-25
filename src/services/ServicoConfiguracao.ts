@@ -8,18 +8,16 @@ export interface DadosConfiguracao {
 
 export default class ServicoConfiguracao {
     async consultarConfiguracao() {
-        let configuracao = await prisma.configuracao.findUnique({
+        const configuracao = await prisma.configuracao.findUnique({
             where: { id: 1 }
         });
 
         if (!configuracao) {
-            configuracao = await prisma.configuracao.create({
-                data: {
-                    id: 1,
-                    aliquotaImposto: 0,
-                    coeficienteDepreciacao: 0
-                }
-            });
+            return {
+                id: 1,
+                aliquotaImposto: 0,
+                coeficienteDepreciacao: 0
+            };
         }
 
         return configuracao;

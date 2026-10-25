@@ -396,7 +396,7 @@ export default class ServicoEquipamento {
                 data: { estadoFisico: novoEstado }
             });
 
-            await tx.movimentacao.create({
+            const movimentacao = await tx.movimentacao.create({
                 data: {
                     equipamentoId: id,
                     origem: `ESTADO_FISICO:${equipamento.estadoFisico}`,
@@ -410,8 +410,8 @@ export default class ServicoEquipamento {
                 data: {
                     usuarioId,
                     acao: "ALTERAR_ESTADO_FISICO",
-                    entidade: "Equipamento",
-                    entidadeId: id,
+                    entidade: "Movimentacao",
+                    entidadeId: movimentacao.id,
                     detalhes: {
                         estadoAnterior: equipamento.estadoFisico,
                         estadoNovo: novoEstado,
@@ -479,7 +479,7 @@ export default class ServicoEquipamento {
                 data: { statusRastreamento: novoStatus }
             });
 
-            await tx.movimentacao.create({
+            const movimentacao = await tx.movimentacao.create({
                 data: {
                     equipamentoId: id,
                     origem: equipamento.statusRastreamento,
@@ -493,8 +493,8 @@ export default class ServicoEquipamento {
                 data: {
                     usuarioId,
                     acao: "ALTERAR_RASTREAMENTO",
-                    entidade: "Equipamento",
-                    entidadeId: id,
+                    entidade: "Movimentacao",
+                    entidadeId: movimentacao.id,
                     detalhes: {
                         statusAnterior: equipamento.statusRastreamento,
                         statusNovo: novoStatus,
@@ -544,10 +544,10 @@ export default class ServicoEquipamento {
                 data: {
                     usuarioId,
                     acao: "MOVIMENTAR",
-                    entidade: "Equipamento",
-                    entidadeId: id,
+                    entidade: "Movimentacao",
+                    entidadeId: movimentacao.id,
                     detalhes: {
-                        movimentacaoId: movimentacao.id,
+                        equipamentoId: id,
                         origem: movimentacao.origem,
                         destino: movimentacao.destino,
                         responsavel: movimentacao.responsavel,
