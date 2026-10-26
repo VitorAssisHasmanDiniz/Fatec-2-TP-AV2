@@ -63,14 +63,23 @@ function obterUsuarioId(req: Request): string {
     return requisicao.usuario!.id;
 }
 
+router.post("/codigo-barras", autorizar("ADMINISTRADOR", "GESTOR_ALMOXARIFADO"), (req, res, next) => {
+    try {
+        const { tipo, sequencia } = req.body ?? {};
+        if (!validarEnum(TipoEquipamento, tipo) || !Number.isInteger(sequencia) || sequencia < 1) {
+            return responderErroEntrada(res, "Informe um tipo de equipamento válido e uma sequência inteira positiva.");
+        }
+        const codigo = servico.gerarCodigoBarras(tipo, sequencia);
+        return res.status(200).json({ nivel: "SUCESSO", mensagem: "Código de barras gerado com sucesso.", dados: { tipo, sequencia, codigoBarrasInterno: codigo } });
+    } catch (erro) { next(erro); }
+});
+
 // Listar equipamentos
 router.get(
     "/",
     autorizar(
         "ADMINISTRADOR",
-        "OPERADOR_CADASTRO",
-        "GESTOR_ALMOXARIFADO",
-        "AUDITOR"
+        "GESTOR_ALMOXARIFADO"
     ),
     async (req: Request, res: Response) => {
         const filtros: {
@@ -78,6 +87,7 @@ router.get(
             tipo?: TipoEquipamento;
             estadoFisico?: EstadoFisico;
             statusRastreamento?: StatusRastreamento;
+            busca?: string;
         } = {};
 
         if (req.query.loteId !== undefined) {
@@ -121,6 +131,11 @@ router.get(
             filtros.statusRastreamento = req.query.statusRastreamento;
         }
 
+        if (req.query.busca !== undefined) {
+            if (!validarTexto(req.query.busca)) return responderErroEntrada(res, "O filtro busca deve ser um texto não vazio.");
+            filtros.busca = req.query.busca.trim();
+        }
+
         const equipamentos = await servico.listarEquipamentos(filtros);
 
         return res.status(200).json({
@@ -136,9 +151,7 @@ router.get(
     "/:id/rastreamento",
     autorizar(
         "ADMINISTRADOR",
-        "OPERADOR_CADASTRO",
-        "GESTOR_ALMOXARIFADO",
-        "AUDITOR"
+        "GESTOR_ALMOXARIFADO"
     ),
     async (req: Request, res: Response) => {
         const id = obterId(req, res);
@@ -159,9 +172,7 @@ router.get(
     "/:id/depreciacao",
     autorizar(
         "ADMINISTRADOR",
-        "OPERADOR_CADASTRO",
-        "GESTOR_ALMOXARIFADO",
-        "AUDITOR"
+        "GESTOR_ALMOXARIFADO"
     ),
     async (req: Request, res: Response) => {
         const id = obterId(req, res);
@@ -191,9 +202,7 @@ router.get(
     "/:id",
     autorizar(
         "ADMINISTRADOR",
-        "OPERADOR_CADASTRO",
-        "GESTOR_ALMOXARIFADO",
-        "AUDITOR"
+        "GESTOR_ALMOXARIFADO"
     ),
     async (req: Request, res: Response) => {
         const id = obterId(req, res);
@@ -212,7 +221,7 @@ router.get(
 // Cadastrar equipamento
 router.post(
     "/",
-    autorizar("ADMINISTRADOR", "OPERADOR_CADASTRO"),
+    autorizar("ADMINISTRADOR", "GESTOR_ALMOXARIFADO"),
     async (req: Request, res: Response) => {
         if (!validarObjeto(req.body)) {
             return responderErroEntrada(
@@ -239,6 +248,10 @@ router.post(
                 res,
                 "Ano de fabricação deve ser um número."
             );
+        }
+
+        if (dados.tipo !== undefined && !validarEnum(TipoEquipamento, dados.tipo)) {
+            return responderErroEntrada(res, "Tipo de equipamento inválido.");
         }
 
         if (dados.marca !== undefined && typeof dados.marca !== "string") {
@@ -357,7 +370,7 @@ router.post(
 // Atualizar dados básicos
 router.patch(
     "/:id",
-    autorizar("ADMINISTRADOR", "OPERADOR_CADASTRO"),
+    autorizar("ADMINISTRADOR", "GESTOR_ALMOXARIFADO"),
     async (req: Request, res: Response) => {
         const id = obterId(req, res);
         if (id === null) return;
@@ -371,6 +384,7 @@ router.patch(
 
         const dados = req.body;
         const permitidos = [
+            "tipo",
             "marca",
             "modelo",
             "anoFabricacao",
@@ -387,6 +401,10 @@ router.patch(
                 res,
                 "Informe ao menos um campo permitido para edição."
             );
+        }
+
+        if (dados.tipo !== undefined && !validarEnum(TipoEquipamento, dados.tipo)) {
+            return responderErroEntrada(res, "Tipo de equipamento inválido.");
         }
 
         if (dados.marca !== undefined && typeof dados.marca !== "string") {
@@ -425,6 +443,7 @@ router.patch(
         }
 
         const dadosEdicao: DadosEdicaoEquipamento = {
+            ...(validarEnum(TipoEquipamento, dados.tipo) && { tipo: dados.tipo }),
             ...(typeof dados.marca === "string" && {
                 marca: dados.marca
             }),
@@ -561,5 +580,15 @@ router.patch(
         });
     }
 );
+
+
+router.delete("/:id", autorizar("ADMINISTRADOR", "GESTOR_ALMOXARIFADO"), async (req: Request, res: Response, next) => {
+    try {
+        const id = obterId(req, res);
+        if (id === null) return;
+        const equipamento = await servico.excluirEquipamento(id, obterUsuarioId(req));
+        return res.status(200).json({ nivel: "SUCESSO", mensagem: "Equipamento excluído com sucesso.", dados: equipamento });
+    } catch (erro) { next(erro); }
+});
 
 export default router;

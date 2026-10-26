@@ -137,12 +137,15 @@ export default class ServicoLote {
         status?: "RECEBIDO" | "EM_TRIAGEM" | "TRIAGEM_CONCLUIDA" | "ENCAMINHADO" | "FINALIZADO" | "CANCELADO";
         dataInicio?: Date;
         dataFim?: Date;
+        notaFiscal?: string;
     } = {}) {
         const where: Prisma.LoteWhereInput = {};
 
         if (filtros.status !== undefined) {
             where.statusProcessamento = filtros.status;
         }
+
+        if (filtros.notaFiscal) where.notaFiscal = { contains: filtros.notaFiscal, mode: "insensitive" };
 
         if (filtros.dataInicio || filtros.dataFim) {
             where.dataEntrada = {
@@ -365,6 +368,55 @@ export default class ServicoLote {
             });
 
             return loteAtualizado;
+        });
+    }
+
+
+    async processarTriagem(id: string, usuarioId: string | null = null) {
+        return prisma.$transaction(async (tx) => {
+            const lote = await tx.lote.findUnique({
+                where: { id },
+                include: { equipamentos: true }
+            });
+            if (!lote) throw new AppError("Lote não encontrado.", 404, "LOTE_NAO_ENCONTRADO");
+            if (lote.statusProcessamento !== "RECEBIDO" && lote.statusProcessamento !== "EM_TRIAGEM") {
+                throw new AppError("Somente lotes recebidos ou em triagem podem ser processados.", 409, "LOTE_NAO_TRIAVEL");
+            }
+            if (lote.equipamentos.length === 0) throw new AppError("O lote não possui equipamentos.", 409, "LOTE_SEM_EQUIPAMENTOS");
+
+            await tx.lote.update({ where: { id }, data: { statusProcessamento: "EM_TRIAGEM" } });
+            for (const equipamento of lote.equipamentos) {
+                if (equipamento.statusRastreamento !== "AGUARDANDO_TRIAGEM" && equipamento.statusRastreamento !== "EM_TRIAGEM") {
+                    throw new AppError(`O equipamento ${equipamento.codigoBarrasInterno} não pode entrar em triagem a partir do status ${equipamento.statusRastreamento}.`, 409, "TRANSICAO_STATUS_INVALIDA");
+                }
+                if (equipamento.statusRastreamento === "AGUARDANDO_TRIAGEM") {
+                    await tx.equipamento.update({ where: { id: equipamento.id }, data: { statusRastreamento: "EM_TRIAGEM" } });
+                    await tx.movimentacao.create({ data: { equipamentoId: equipamento.id, origem: equipamento.statusRastreamento, destino: "EM_TRIAGEM", responsavel: "SISTEMA_TRIAGEM", observacao: `Triagem iniciada para o lote ${id}.` } });
+                }
+            }
+            for (const equipamento of lote.equipamentos) {
+                if (equipamento.estadoFisico === "INSERVIVEL") {
+                    await tx.equipamento.update({ where: { id: equipamento.id }, data: { statusRastreamento: "AGUARDANDO_DESMONTE" } });
+                    await tx.movimentacao.create({ data: { equipamentoId: equipamento.id, origem: "EM_TRIAGEM", destino: "AGUARDANDO_DESMONTE", responsavel: "SISTEMA_TRIAGEM", observacao: `Encaminhado após triagem do lote ${id}.` } });
+                } else {
+                    await tx.equipamento.update({ where: { id: equipamento.id }, data: { statusRastreamento: "AGUARDANDO_DESMONTE" } });
+                    await tx.movimentacao.create({ data: { equipamentoId: equipamento.id, origem: "EM_TRIAGEM", destino: "AGUARDANDO_DESMONTE", responsavel: "SISTEMA_TRIAGEM", observacao: `Triagem concluída para o lote ${id}.` } });
+                }
+            }
+            const atualizado = await tx.lote.update({ where: { id }, data: { statusProcessamento: "TRIAGEM_CONCLUIDA" }, include: { organizacao: true, equipamentos: { include: { historicoMovimentacao: { orderBy: { dataHora: "desc" } } } } } });
+            await tx.registroAuditoria.create({ data: { usuarioId, acao: "TRIAGEM_CONCLUIDA", entidade: "Lote", entidadeId: id, detalhes: { quantidadeEquipamentos: lote.equipamentos.length, statusAnterior: lote.statusProcessamento, statusNovo: "TRIAGEM_CONCLUIDA" } } });
+            return atualizado;
+        });
+    }
+
+    async excluirLote(id: string, usuarioId: string | null = null) {
+        return prisma.$transaction(async (tx) => {
+            const lote = await tx.lote.findUnique({ where: { id }, include: { _count: { select: { equipamentos: true } } } });
+            if (!lote) throw new AppError("Lote não encontrado.", 404, "LOTE_NAO_ENCONTRADO");
+            if (lote._count.equipamentos > 0) throw new AppError("Não é possível excluir lote com equipamentos vinculados.", 409, "LOTE_COM_EQUIPAMENTOS");
+            await tx.registroAuditoria.create({ data: { usuarioId, acao: "EXCLUIR", entidade: "Lote", entidadeId: id, detalhes: { organizacaoId: lote.organizacaoId, status: lote.statusProcessamento } } });
+            await tx.lote.delete({ where: { id } });
+            return { id };
         });
     }
 

@@ -28,6 +28,15 @@ router.get("/", async (_req, res, next) => {
     }
 });
 
+
+router.get("/buscar", async (req, res, next) => {
+    try {
+        if (typeof req.query.nome !== "string") throw new AppError("Informe o parâmetro nome.", 400, "TERMO_BUSCA_OBRIGATORIO");
+        const dados = await servico.buscarOrganizacoesPorNome(req.query.nome);
+        return res.status(200).json({ nivel: "SUCESSO", mensagem: "Pesquisa de organizações concluída.", dados });
+    } catch (erro) { next(erro); }
+});
+
 router.get("/:id", async (req, res, next) => {
     try {
         const organizacao = await servico.buscarOrganizacao(req.params.id);
@@ -95,6 +104,35 @@ router.post("/", async (req, res, next) => {
     } catch (erro) {
         next(erro);
     }
+});
+
+
+router.patch("/:id", async (req, res, next) => {
+    try {
+        const corpo = req.body;
+        if (!corpo || typeof corpo !== "object" || Array.isArray(corpo)) {
+            throw new AppError("O corpo deve ser um objeto JSON.", 400, "CORPO_INVALIDO");
+        }
+        const permitidos = ["razaoSocial", "cnpj", "inscricaoEstadual", "enderecoCompleto", "telefone", "email"];
+        const campos = Object.keys(corpo);
+        if (!campos.length || campos.some((campo) => !permitidos.includes(campo))) {
+            throw new AppError("Informe ao menos um campo permitido para edição.", 400, "DADOS_INVALIDOS");
+        }
+        for (const campo of campos) {
+            if (typeof corpo[campo] !== "string") throw new AppError(`O campo ${campo} deve ser texto.`, 400, "DADOS_INVALIDOS");
+        }
+        const requisicao = req as RequisicaoAutenticada;
+        const organizacao = await servico.editarOrganizacao(req.params.id, corpo, requisicao.usuario!.id);
+        return res.status(200).json({ nivel: "SUCESSO", mensagem: "Organização atualizada com sucesso.", dados: organizacao });
+    } catch (erro) { next(erro); }
+});
+
+router.delete("/:id", autorizar("ADMINISTRADOR"), async (req, res, next) => {
+    try {
+        const requisicao = req as RequisicaoAutenticada;
+        const organizacao = await servico.excluirOrganizacao(String(req.params.id), requisicao.usuario!.id);
+        return res.status(200).json({ nivel: "SUCESSO", mensagem: "Organização excluída com sucesso.", dados: organizacao });
+    } catch (erro) { next(erro); }
 });
 
 router.patch("/:id/desativar", async (req, res, next) => {

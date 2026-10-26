@@ -7,6 +7,7 @@ import {
 } from "../../generated/prisma/client.js";
 import { prisma } from "../lib/prisma.js";
 import AppError from "../errors/AppError.js";
+import { gerarCodigoBarrasSequencial } from "../utils/codigoBarras.js";
 
 export interface DadosEquipamento {
     tipo: TipoEquipamento;
@@ -20,6 +21,7 @@ export interface DadosEquipamento {
 }
 
 export interface DadosEdicaoEquipamento {
+    tipo?: TipoEquipamento;
     marca?: string;
     modelo?: string;
     anoFabricacao?: number;
@@ -32,6 +34,7 @@ export interface FiltrosEquipamento {
     tipo?: TipoEquipamento;
     estadoFisico?: EstadoFisico;
     statusRastreamento?: StatusRastreamento;
+    busca?: string;
 }
 
 export default class ServicoEquipamento {
@@ -110,7 +113,7 @@ export default class ServicoEquipamento {
         }
     }
 
-    private gerarCodigoBarras(tipo: TipoEquipamento): string {
+    gerarCodigoBarras(tipo: TipoEquipamento, sequencia?: number): string {
         const prefixo = this.prefixos[tipo];
 
         if (!prefixo) {
@@ -121,6 +124,9 @@ export default class ServicoEquipamento {
             );
         }
 
+        if (sequencia !== undefined) {
+            return gerarCodigoBarrasSequencial(tipo, sequencia);
+        }
         return `${prefixo}-${new Date().getFullYear()}-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
     }
 
@@ -238,6 +244,13 @@ export default class ServicoEquipamento {
         if (filtros.statusRastreamento) {
             where.statusRastreamento = filtros.statusRastreamento;
         }
+        if (filtros.busca) {
+            where.OR = [
+                { marca: { contains: filtros.busca, mode: "insensitive" } },
+                { modelo: { contains: filtros.busca, mode: "insensitive" } },
+                { codigoBarrasInterno: { contains: filtros.busca, mode: "insensitive" } }
+            ];
+        }
 
         return prisma.equipamento.findMany({
             where,
@@ -296,6 +309,7 @@ export default class ServicoEquipamento {
             const atualizado = await tx.equipamento.update({
                 where: { id },
                 data: {
+                    ...(dados.tipo !== undefined && { tipo: dados.tipo }),
                     ...(dados.marca !== undefined && {
                         marca: this.validarTexto(dados.marca, "marca")
                     }),
@@ -329,6 +343,7 @@ export default class ServicoEquipamento {
                     detalhes: {
                         camposAlterados: Object.keys(dados),
                         antes: {
+                            tipo: equipamento.tipo,
                             marca: equipamento.marca,
                             modelo: equipamento.modelo,
                             anoFabricacao: equipamento.anoFabricacao,
@@ -336,6 +351,7 @@ export default class ServicoEquipamento {
                             posicaoNoLote: equipamento.posicaoNoLote
                         },
                         depois: {
+                            tipo: atualizado.tipo,
                             marca: atualizado.marca,
                             modelo: atualizado.modelo,
                             anoFabricacao: atualizado.anoFabricacao,
@@ -566,6 +582,23 @@ export default class ServicoEquipamento {
         return {
             movimentacoes: equipamento.historicoMovimentacao
         };
+    }
+
+
+    async excluirEquipamento(id: string, usuarioId: string | null = null) {
+        return prisma.$transaction(async (tx) => {
+            const equipamento = await tx.equipamento.findUnique({
+                where: { id }, include: { historicoMovimentacao: true }
+            });
+            if (!equipamento) throw new AppError("Equipamento não encontrado.", 404, "EQUIPAMENTO_NAO_ENCONTRADO");
+            await tx.registroAuditoria.create({ data: {
+                usuarioId, acao: "EXCLUIR", entidade: "Equipamento", entidadeId: id,
+                detalhes: { codigoBarrasInterno: equipamento.codigoBarrasInterno, loteId: equipamento.loteId, movimentacoesRemovidas: equipamento.historicoMovimentacao.length }
+            }});
+            await tx.movimentacao.deleteMany({ where: { equipamentoId: id } });
+            await tx.equipamento.delete({ where: { id } });
+            return { id, codigoBarrasInterno: equipamento.codigoBarrasInterno };
+        });
     }
 
     calcularDepreciacao(

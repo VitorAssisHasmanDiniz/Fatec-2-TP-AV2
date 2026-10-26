@@ -150,6 +150,102 @@ export default class ServicoOrganizacao {
         }
     }
 
+
+
+    async buscarOrganizacoesPorNome(nome: string) {
+        const termo = nome.trim();
+        if (!termo) throw new AppError("Informe um nome para pesquisa.", 400, "TERMO_BUSCA_OBRIGATORIO");
+        return prisma.organizacao.findMany({
+            where: { razaoSocial: { contains: termo, mode: "insensitive" } },
+            include: { contratoVigente: true },
+            orderBy: { razaoSocial: "asc" },
+            take: 100
+        });
+    }
+
+    async editarOrganizacao(
+        id: string,
+        dados: {
+            razaoSocial?: string;
+            cnpj?: string;
+            inscricaoEstadual?: string;
+            enderecoCompleto?: string;
+            telefone?: string;
+            email?: string;
+        },
+        usuarioId: string | null = null
+    ) {
+        const campos = Object.keys(dados).filter((campo) =>
+            (dados as Record<string, unknown>)[campo] !== undefined
+        );
+        if (campos.length === 0) {
+            throw new AppError("Informe ao menos um campo para editar.", 400, "NENHUM_CAMPO_INFORMADO");
+        }
+
+        const atualizacao: {
+            razaoSocial?: string;
+            cnpj?: string;
+            inscricaoEstadual?: string;
+            enderecoCompleto?: string;
+            telefone?: string;
+            email?: string;
+        } = {};
+
+        if (dados.razaoSocial !== undefined) {
+            const valor = dados.razaoSocial.trim();
+            if (!valor || valor.length > 200) throw new AppError("Razão social deve ter de 1 a 200 caracteres.", 400, "RAZAO_SOCIAL_INVALIDA");
+            atualizacao.razaoSocial = valor;
+        }
+        if (dados.cnpj !== undefined) {
+            const cnpj = dados.cnpj.replace(/\D/g, "");
+            if (!this.validadorCNPJ.validar(cnpj)) throw new AppError("CNPJ inválido.", 400, "CNPJ_INVALIDO");
+            atualizacao.cnpj = cnpj;
+        }
+        if (dados.inscricaoEstadual !== undefined) atualizacao.inscricaoEstadual = dados.inscricaoEstadual.trim();
+        if (dados.enderecoCompleto !== undefined) atualizacao.enderecoCompleto = dados.enderecoCompleto.trim();
+        if (dados.telefone !== undefined) atualizacao.telefone = dados.telefone.trim();
+        if (dados.email !== undefined) {
+            const email = dados.email.trim();
+            if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AppError("E-mail inválido.", 400, "EMAIL_INVALIDO");
+            atualizacao.email = email;
+        }
+
+        try {
+            return await prisma.$transaction(async (tx) => {
+                const existente = await tx.organizacao.findUnique({ where: { id } });
+                if (!existente) throw new AppError("Organização não encontrada.", 404, "ORGANIZACAO_NAO_ENCONTRADA");
+                const atualizada = await tx.organizacao.update({ where: { id }, data: atualizacao, include: { contratoVigente: true } });
+                await tx.registroAuditoria.create({ data: {
+                    usuarioId, acao: "EDITAR", entidade: "Organizacao", entidadeId: id,
+                    detalhes: { camposAlterados: campos, antes: { razaoSocial: existente.razaoSocial, cnpj: existente.cnpj }, depois: { razaoSocial: atualizada.razaoSocial, cnpj: atualizada.cnpj } }
+                }});
+                return atualizada;
+            });
+        } catch (erro) {
+            if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === "P2002") {
+                throw new AppError("Já existe uma organização com esse CNPJ.", 409, "ORGANIZACAO_DUPLICADA");
+            }
+            throw erro;
+        }
+    }
+
+    async excluirOrganizacao(id: string, usuarioId: string | null = null) {
+        return prisma.$transaction(async (tx) => {
+            const existente = await tx.organizacao.findUnique({
+                where: { id },
+                include: { _count: { select: { lotes: true } }, contratoVigente: true }
+            });
+            if (!existente) throw new AppError("Organização não encontrada.", 404, "ORGANIZACAO_NAO_ENCONTRADA");
+            if (existente._count.lotes > 0) throw new AppError("Não é possível excluir uma organização com lotes vinculados. Desative-a para preservar o histórico.", 409, "ORGANIZACAO_COM_LOTES");
+            await tx.registroAuditoria.create({ data: {
+                usuarioId, acao: "EXCLUIR", entidade: "Organizacao", entidadeId: id,
+                detalhes: { razaoSocial: existente.razaoSocial, cnpj: existente.cnpj, contratoId: existente.contratoVigente?.id ?? null }
+            }});
+            await tx.organizacao.delete({ where: { id } });
+            return { id, razaoSocial: existente.razaoSocial };
+        });
+    }
+
     async buscarOrganizacao(id: string) {
         const organizacao = await prisma.organizacao.findUnique({
             where: { id },

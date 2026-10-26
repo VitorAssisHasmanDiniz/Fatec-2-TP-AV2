@@ -44,7 +44,9 @@ export const ModelName = {
     Contrato: 'Contrato',
     Lote: 'Lote',
     Equipamento: 'Equipamento',
-    Movimentacao: 'Movimentacao'
+    Movimentacao: 'Movimentacao',
+    Configuracao: 'Configuracao',
+    RegistroAuditoria: 'RegistroAuditoria'
 };
 /*
  * Enums
@@ -88,7 +90,9 @@ export const ContratoScalarFieldEnum = {
     dataVencimento: 'dataVencimento',
     clausulas: 'clausulas',
     valorMensal: 'valorMensal',
-    renovacaoAutomatica: 'renovacaoAutomatica'
+    renovacaoAutomatica: 'renovacaoAutomatica',
+    criadoEm: 'criadoEm',
+    atualizadoEm: 'atualizadoEm'
 };
 export const LoteScalarFieldEnum = {
     id: 'id',
@@ -121,9 +125,31 @@ export const MovimentacaoScalarFieldEnum = {
     responsavel: 'responsavel',
     observacao: 'observacao'
 };
+export const ConfiguracaoScalarFieldEnum = {
+    id: 'id',
+    aliquotaImposto: 'aliquotaImposto',
+    coeficienteDepreciacao: 'coeficienteDepreciacao',
+    criadoEm: 'criadoEm',
+    atualizadoEm: 'atualizadoEm'
+};
+export const RegistroAuditoriaScalarFieldEnum = {
+    id: 'id',
+    usuarioId: 'usuarioId',
+    acao: 'acao',
+    entidade: 'entidade',
+    entidadeId: 'entidadeId',
+    detalhes: 'detalhes',
+    ip: 'ip',
+    userAgent: 'userAgent',
+    criadoEm: 'criadoEm'
+};
 export const SortOrder = {
     asc: 'asc',
     desc: 'desc'
+};
+export const NullableJsonNullValueInput = {
+    DbNull: DbNull,
+    JsonNull: JsonNull
 };
 export const QueryMode = {
     default: 'default',
@@ -132,4 +158,9 @@ export const QueryMode = {
 export const NullsOrder = {
     first: 'first',
     last: 'last'
+};
+export const JsonNullValueFilter = {
+    DbNull: DbNull,
+    JsonNull: JsonNull,
+    AnyNull: AnyNull
 };

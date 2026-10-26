@@ -13,14 +13,13 @@ router.use(
     autenticar,
     autorizar(
         "ADMINISTRADOR",
-        "OPERADOR_CADASTRO",
         "GESTOR_ALMOXARIFADO"
     )
 );
 
 router.get("/", async (req, res, next) => {
     try {
-        const { status, dataInicio, dataFim } = req.query;
+        const { status, dataInicio, dataFim, nf } = req.query;
 
         const statusPermitidos = [
             "RECEBIDO",
@@ -88,10 +87,15 @@ router.get("/", async (req, res, next) => {
             );
         }
 
+        if (nf !== undefined && (typeof nf !== "string" || !nf.trim())) {
+            throw new AppError("O filtro nf deve ser um texto não vazio.", 400, "FILTRO_INVALIDO");
+        }
+
         const lotes = await servico.listarLotes({
             status: statusFiltro,
             dataInicio: inicio,
-            dataFim: fim
+            dataFim: fim,
+            notaFiscal: typeof nf === "string" ? nf.trim() : undefined
         });
 
         return res.status(200).json({
@@ -185,6 +189,23 @@ router.post("/", async (req, res, next) => {
     } catch (erro) {
         next(erro);
     }
+});
+
+
+router.post("/:id/triagem", async (req, res, next) => {
+    try {
+        const requisicao = req as RequisicaoAutenticada;
+        const lote = await servico.processarTriagem(req.params.id, requisicao.usuario!.id);
+        return res.status(200).json({ nivel: "SUCESSO", mensagem: "Triagem do lote concluída com sucesso.", dados: lote });
+    } catch (erro) { next(erro); }
+});
+
+router.delete("/:id", autorizar("ADMINISTRADOR"), async (req, res, next) => {
+    try {
+        const requisicao = req as RequisicaoAutenticada;
+        const lote = await servico.excluirLote(String(req.params.id), requisicao.usuario!.id);
+        return res.status(200).json({ nivel: "SUCESSO", mensagem: "Lote excluído com sucesso.", dados: lote });
+    } catch (erro) { next(erro); }
 });
 
 router.patch("/:id/cancelar", async (req, res, next) => {

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { rateLimit } from "express-rate-limit";
 import ServicoAutenticacao from "../services/ServicoAutenticacao.js";
 import AppError from "../errors/AppError.js";
@@ -44,20 +45,6 @@ const limiteLogin = rateLimit({
 router.post("/login", limiteLogin, async (req, res, next) => {
     try {
         const { nome, usuario, senha } = req.body;
-        await prisma.registroAuditoria.create({
-            data: {
-                acao: "LOGIN_FALHOU",
-                entidade: "Autenticacao",
-                entidadeId:
-                    typeof usuario === "string" ? usuario.trim() : null,
-                detalhes: {
-                    motivo: "DADOS_INVALIDOS"
-                },
-                ip: req.ip ?? null,
-                userAgent: req.get("user-agent") ?? null
-            }
-        });
-
         if (
             typeof usuario !== "string" ||
             typeof senha !== "string" ||
@@ -86,6 +73,31 @@ router.post("/login", limiteLogin, async (req, res, next) => {
     } catch (erro) {
         next(erro);
     }
+});
+
+
+router.patch("/senha", autenticar, async (req, res, next) => {
+    try {
+        const requisicao = req as RequisicaoAutenticada;
+        const { senhaAtual, senhaNova, confirmarSenha } = req.body ?? {};
+        if (typeof senhaAtual !== "string" || typeof senhaNova !== "string" || typeof confirmarSenha !== "string") {
+            throw new AppError("Informe senhaAtual, senhaNova e confirmarSenha.", 400, "DADOS_INVALIDOS");
+        }
+        if (senhaNova.length < 8) throw new AppError("A nova senha deve ter pelo menos 8 caracteres.", 400, "SENHA_INVALIDA");
+        if (senhaNova !== confirmarSenha) throw new AppError("A nova senha e a confirmação não coincidem.", 400, "SENHAS_DIFERENTES");
+        if (senhaAtual === senhaNova) throw new AppError("A nova senha deve ser diferente da senha atual.", 400, "SENHA_IGUAL");
+
+        await prisma.$transaction(async (tx) => {
+            const usuario = await tx.usuario.findUnique({ where: { id: requisicao.usuario!.id } });
+            if (!usuario || !usuario.ativo) throw new AppError("Usuário não encontrado ou inativo.", 401, "USUARIO_INVALIDO");
+            const confere = await bcrypt.compare(senhaAtual, usuario.senhaHash);
+            if (!confere) throw new AppError("Senha atual inválida.", 401, "SENHA_ATUAL_INVALIDA");
+            const senhaHash = await bcrypt.hash(senhaNova, 12);
+            await tx.usuario.update({ where: { id: usuario.id }, data: { senhaHash } });
+            await tx.registroAuditoria.create({ data: { usuarioId: usuario.id, acao: "ALTERAR_SENHA", entidade: "Usuario", entidadeId: usuario.id, detalhes: { alteradaPeloProprioUsuario: true }, ip: req.ip ?? null, userAgent: req.get("user-agent") ?? null } });
+        });
+        return res.status(200).json({ nivel: "SUCESSO", mensagem: "Senha alterada com sucesso." });
+    } catch (erro) { next(erro); }
 });
 
 router.get("/me", autenticar, async (req, res, next) => {

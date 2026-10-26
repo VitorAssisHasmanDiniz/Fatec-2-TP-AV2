@@ -4,6 +4,7 @@ import ServicoUsuarios from "../services/ServicoUsuarios.js";
 import autenticar from "../middlewares/autenticar.js";
 import autorizar from "../middlewares/autorizar.js";
 import AppError from "../errors/AppError.js";
+import { prisma } from "../lib/prisma.js";
 import type { PapelUsuario } from "../types/Autenticacao.js";
 import type { RequisicaoAutenticada } from "../middlewares/autenticar.js";
 
@@ -50,6 +51,22 @@ router.get("/inativos", async (_req, res, next) => {
     } catch (erro) {
         next(erro);
     }
+});
+
+
+router.get("/buscar", async (req, res, next) => {
+    try {
+        const login = req.query.usuario;
+        if (typeof login !== "string" || !login.trim()) {
+            throw new AppError("Informe o parâmetro usuario.", 400, "TERMO_BUSCA_OBRIGATORIO");
+        }
+        const usuario = await prisma.usuario.findUnique({
+            where: { usuario: login.trim() },
+            select: { id: true, nome: true, usuario: true, papel: true, ativo: true, ultimoAcesso: true, criadoEm: true, atualizadoEm: true }
+        });
+        if (!usuario) throw new AppError("Usuário não encontrado", 404, "USUARIO_NAO_ENCONTRADO");
+        return res.json({ nivel: "SUCESSO", mensagem: "Usuário encontrado com sucesso", dados: usuario });
+    } catch (erro) { next(erro); }
 });
 
 router.get("/:id", async (req, res, next) => {

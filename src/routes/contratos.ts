@@ -13,8 +13,7 @@ router.use(autenticar);
 
 const leitura = autorizar(
     PapelUsuario.ADMINISTRADOR,
-    PapelUsuario.OPERADOR_CADASTRO,
-    PapelUsuario.AUDITOR
+    PapelUsuario.OPERADOR_CADASTRO
 );
 
 const escrita = autorizar(

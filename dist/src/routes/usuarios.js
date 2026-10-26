@@ -3,6 +3,7 @@ import ServicoUsuarios from "../services/ServicoUsuarios.js";
 import autenticar from "../middlewares/autenticar.js";
 import autorizar from "../middlewares/autorizar.js";
 import AppError from "../errors/AppError.js";
+import { prisma } from "../lib/prisma.js";
 const router = Router();
 const servicoUsuarios = new ServicoUsuarios();
 const papeisValidos = [
@@ -12,6 +13,10 @@ const papeisValidos = [
     "AUDITOR",
 ];
 router.use(autenticar, autorizar("ADMINISTRADOR"));
+function obterUsuarioId(req) {
+    const requisicao = req;
+    return requisicao.usuario.id;
+}
 router.get("/", async (_req, res, next) => {
     try {
         const usuarios = await servicoUsuarios.listar();
@@ -33,6 +38,24 @@ router.get("/inativos", async (_req, res, next) => {
             mensagem: "Usuários inativos listados com sucesso",
             dados: usuarios,
         });
+    }
+    catch (erro) {
+        next(erro);
+    }
+});
+router.get("/buscar", async (req, res, next) => {
+    try {
+        const login = req.query.usuario;
+        if (typeof login !== "string" || !login.trim()) {
+            throw new AppError("Informe o parâmetro usuario.", 400, "TERMO_BUSCA_OBRIGATORIO");
+        }
+        const usuario = await prisma.usuario.findUnique({
+            where: { usuario: login.trim() },
+            select: { id: true, nome: true, usuario: true, papel: true, ativo: true, ultimoAcesso: true, criadoEm: true, atualizadoEm: true }
+        });
+        if (!usuario)
+            throw new AppError("Usuário não encontrado", 404, "USUARIO_NAO_ENCONTRADO");
+        return res.json({ nivel: "SUCESSO", mensagem: "Usuário encontrado com sucesso", dados: usuario });
     }
     catch (erro) {
         next(erro);
@@ -68,7 +91,7 @@ router.post("/", async (req, res, next) => {
             !papeisValidos.includes(papel)) {
             throw new AppError("Informe nome, usuário, senha e um papel válido", 400, "DADOS_INVALIDOS");
         }
-        const novoUsuario = await servicoUsuarios.criar(nome, usuario, senha, papel);
+        const novoUsuario = await servicoUsuarios.criar(nome, usuario, senha, papel, obterUsuarioId(req));
         res.status(201).json({
             nivel: "SUCESSO",
             mensagem: "Usuário criado com sucesso",
@@ -108,7 +131,7 @@ router.put("/:id", async (req, res, next) => {
             usuario,
             senha,
             papel,
-        });
+        }, obterUsuarioId(req));
         res.json({
             nivel: "SUCESSO",
             mensagem: "Usuário atualizado com sucesso",
@@ -125,8 +148,7 @@ router.delete("/:id", async (req, res, next) => {
         if (typeof id !== "string") {
             throw new AppError("ID do usuário inválido", 400, "ID_INVALIDO");
         }
-        const requisicao = req;
-        const usuario = await servicoUsuarios.excluir(id, requisicao.usuario.id);
+        const usuario = await servicoUsuarios.excluir(id, obterUsuarioId(req));
         res.json({
             nivel: "SUCESSO",
             mensagem: "Usuário excluído com sucesso",
@@ -147,7 +169,7 @@ router.patch("/:id/status", async (req, res, next) => {
         if (typeof ativo !== "boolean") {
             throw new AppError("O campo ativo deve ser true ou false", 400, "DADOS_INVALIDOS");
         }
-        const usuario = await servicoUsuarios.alterarStatus(id, ativo);
+        const usuario = await servicoUsuarios.alterarStatus(id, ativo, obterUsuarioId(req));
         res.json({
             nivel: "SUCESSO",
             mensagem: ativo
