@@ -8,8 +8,7 @@ function calcularDigitoCNPJ(base: string): number {
         : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
 
     const soma = [...base].reduce(
-        (total, digito, indice) =>
-            total + Number(digito) * pesos[indice],
+        (total, digito, indice) => total + Number(digito) * pesos[indice],
         0
     );
 
@@ -25,9 +24,10 @@ function gerarCNPJ(base12: string): string {
     }
 
     const primeiro = calcularDigitoCNPJ(base);
-    const segundo = calcularDigitoCNPJ(`${ base }${ primeiro } `);
+    const baseComPrimeiroDigito = `${base}${primeiro}`;
+    const segundo = calcularDigitoCNPJ(baseComPrimeiroDigito);
 
-    return `${ base }${ primeiro }${ segundo } `;
+    return `${baseComPrimeiroDigito}${segundo}`;
 }
 
 function diasAPartirDeHoje(dias: number): Date {
@@ -155,7 +155,6 @@ async function main() {
             valorMensal,
             ...dados
         } = organizacao;
-
         await prisma.organizacao.upsert({
             where: { id: dados.id },
             update: {
@@ -178,7 +177,7 @@ async function main() {
                 renovacaoAutomatica: dados.ativo
             },
             create: {
-                id: `20000000-0000 - 4000 - 8000 - ${ String(indice + 1).padStart(12, "0") } `,
+                id: `20000000-0000-4000-8000-${String(indice + 1).padStart(12, "0")}`,
                 organizacaoId: dados.id,
                 dataAssinatura: diasAPartirDeHoje(-365),
                 dataVencimento: diasAPartirDeHoje(diasVencimento),
@@ -390,7 +389,7 @@ async function main() {
         });
 
         const movimentoId =
-            `30000000-0000 - 4000 - 8000 - ${ String(indice + 1).padStart(12, "0") } `;
+            `30000000-0000-4000-8000-${String(indice + 1).padStart(12, "0")}`;
 
         await prisma.movimentacao.upsert({
             where: { id: movimentoId },

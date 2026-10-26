@@ -42,12 +42,14 @@ O alias `/clientes` aponta para as mesmas rotas de `/organizacoes`, preservando 
 
 As exclusões de organização e lote são bloqueadas quando existem dependências que tornariam o histórico inconsistente. Equipamentos removidos têm as movimentações operacionais removidas junto, mas a ação de exclusão fica registrada na auditoria.
 
-## Testes
+## Documentação Swagger
 
-- `npm test`: testes unitários das regras de geração de código de barras.
-- `npm run build`: compilação TypeScript.
+Com a API em execução, abra no navegador:
 
-Os testes unitários não substituem os testes de integração contra um PostgreSQL de teste. Antes de publicar, valide também os fluxos de autenticação, autorização por perfil, CRUD, triagem, relatórios e auditoria com dados de teste.
+- Interface interativa: `http://localhost:3000/api-docs`
+- Documento OpenAPI em JSON: `http://localhost:3000/api-docs.json`
+
+A interface Swagger permite expandir cada rota, visualizar e editar o exemplo JSON no campo **Request body** antes de clicar em **Execute**, além de consultar os parâmetros e a resposta. Para testar rotas protegidas, execute `POST /auth/login`, copie o token JWT retornado e clique em **Authorize** para informar o token. Os exemplos são modelos ilustrativos; ajuste IDs, enumerações e dados conforme os registros e regras do banco local. A interface carrega os arquivos visuais do Swagger UI pelo CDN do jsDelivr, portanto o navegador precisa ter acesso à internet para carregar a interface; o JSON OpenAPI é servido pela própria API.
 
 ## Popular o banco com dados de demonstração
 
